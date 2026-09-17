@@ -54,9 +54,70 @@ async def index():
     return (ROOT / "static" / "index.html").read_text()
 
 
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    return (ROOT / "static" / "dashboard.html").read_text()
+
+
 @app.get("/api/challenges")
 async def challenges():
     return _list_challenges()
+
+
+@app.get("/api/metrics")
+async def metrics():
+    """Aggregate all benchmark results + bounty runs into dashboard stats."""
+    rows = []
+    for f in ROOT.glob("results.*.jsonl"):
+        for line in f.read_text().splitlines():
+            if line.strip():
+                try:
+                    r = json.loads(line); r["_src"] = f.name; rows.append(r)
+                except Exception:
+                    pass
+    # de-dupe by (source, name) keeping the latest occurrence
+    seen = {}
+    for r in rows:
+        seen[(r["_src"], r.get("name"))] = r
+    rows = list(seen.values())
+
+    by_cat = {}
+    for r in rows:
+        c = r.get("specialist") or "?"
+        b = by_cat.setdefault(c, {"total": 0, "solved": 0, "durations": []})
+        b["total"] += 1
+        if r.get("solved"):
+            b["solved"] += 1
+            if r.get("time_to_flag_s"):
+                b["durations"].append(r["time_to_flag_s"])
+
+    solved = [r for r in rows if r.get("solved")]
+    ttf = sorted(r["time_to_flag_s"] for r in solved if r.get("time_to_flag_s"))
+    costs = [r["cost_usd"] for r in rows if r.get("cost_usd")]
+
+    bounty = []
+    bm = ROOT / "bounty_metrics.jsonl"
+    if bm.exists():
+        for line in bm.read_text().splitlines():
+            if line.strip():
+                try: bounty.append(json.loads(line))
+                except Exception: pass
+
+    return {
+        "total": len(rows), "solved": len(solved),
+        "solve_rate": round(len(solved) / len(rows), 3) if rows else 0,
+        "by_category": {c: {"total": b["total"], "solved": b["solved"],
+                            "rate": round(b["solved"] / b["total"], 3) if b["total"] else 0}
+                        for c, b in sorted(by_cat.items())},
+        "time_to_exploit": {
+            "fastest": ttf[0] if ttf else None,
+            "median": ttf[len(ttf) // 2] if ttf else None,
+            "slowest": ttf[-1] if ttf else None,
+            "samples": ttf,
+        },
+        "cost_total_usd": round(sum(costs), 2) if costs else 0,
+        "bounty_runs": sorted(bounty, key=lambda r: r.get("time", 0), reverse=True)[:20],
+    }
 
 
 @app.get("/api/results")

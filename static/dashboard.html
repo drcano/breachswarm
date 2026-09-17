@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTF Agent — Metrics</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{ --bg:#060a07; --surface:#0b110c; --surface-2:#0f160f; --ink:#c6e6cd;
+    --ink-2:#7fae8a; --ink-3:#4d6b55; --line:#18271b; --accent:#3ef07f;
+    --warn:#d7e04a; --bad:#ff5c6c; --glow:rgba(62,240,127,.35);
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace; }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--mono);line-height:1.5}
+  header{border-bottom:1px solid var(--line);padding:14px 20px;display:flex;gap:16px;align-items:center}
+  .brand{font-weight:600;text-shadow:0 0 12px var(--glow)} .brand .d{color:var(--accent)}
+  nav{margin-left:auto;display:flex;gap:16px} nav a{color:var(--ink-3);text-decoration:none;font-size:.85rem}
+  nav a:hover,nav a.on{color:var(--accent)}
+  main{max-width:1000px;margin:0 auto;padding:22px 20px}
+  h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);margin:26px 0 10px;font-weight:600}
+  .tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .tile .k{font-size:.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em}
+  .tile .v{font-size:1.9rem;font-weight:600;color:var(--accent);margin-top:4px;text-shadow:0 0 14px var(--glow)}
+  .tile .v small{font-size:.9rem;color:var(--ink-2)}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-top:12px}
+  .row{display:flex;align-items:center;gap:12px;margin:8px 0;font-size:.85rem}
+  .row .lbl{width:110px;color:var(--ink-2)} .row .bar{flex:1;height:14px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+  .row .bar>i{display:block;height:100%;background:var(--accent)} .row .num{width:70px;text-align:right;color:var(--ink-2)}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:6px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--ink-3);text-transform:uppercase;font-size:.68rem;letter-spacing:.05em}
+  svg{width:100%;height:140px} .muted{color:var(--ink-3);font-size:.82rem}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">ctf<span class="d">-</span>agent <span style="color:var(--ink-3)">metrics</span></span>
+  <nav><a href="/">console</a><a class="on" href="/dashboard">dashboard</a></nav>
+</header>
+<main>
+  <div class="tiles" id="tiles"></div>
+  <h2>Solve rate by category</h2>
+  <div class="card" id="bycat"><span class="muted">loading…</span></div>
+  <h2>Time-to-exploit distribution (solved)</h2>
+  <div class="card"><svg id="hist" viewBox="0 0 600 140" preserveAspectRatio="none"></svg>
+    <div class="muted" id="histlbl"></div></div>
+  <h2>Recent authorized assessments</h2>
+  <div class="card"><table id="bounty"><thead><tr><th>When</th><th>Program</th><th>Target</th><th>Turns</th><th>Duration</th><th>Cost</th></tr></thead><tbody></tbody></table></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+function tile(k,v,sub){return `<div class="tile"><div class="k">${k}</div><div class="v">${v}${sub?` <small>${sub}</small>`:""}</div></div>`;}
+async function load(){
+  const m=await (await fetch("/api/metrics")).json();
+  $("#tiles").innerHTML =
+    tile("Solve rate", Math.round(m.solve_rate*100)+"%", `${m.solved}/${m.total}`)
+    + tile("Fastest exploit", m.time_to_exploit.fastest!=null?m.time_to_exploit.fastest+"s":"—")
+    + tile("Median exploit", m.time_to_exploit.median!=null?m.time_to_exploit.median+"s":"—")
+    + tile("Total spend", "$"+(m.cost_total_usd||0));
+  // by category
+  const cats=Object.entries(m.by_category);
+  $("#bycat").innerHTML = cats.length? cats.map(([c,b])=>`
+    <div class="row"><span class="lbl">${c}</span>
+      <span class="bar"><i style="width:${Math.round(b.rate*100)}%"></i></span>
+      <span class="num">${b.solved}/${b.total}</span></div>`).join("") : '<span class="muted">no runs yet</span>';
+  // histogram
+  const s=m.time_to_exploit.samples||[];
+  if(s.length){
+    const max=Math.max(...s), buckets=10, step=Math.ceil(max/buckets)||1, hist=Array(buckets).fill(0);
+    s.forEach(v=>hist[Math.min(buckets-1,Math.floor(v/step))]++);
+    const hmax=Math.max(...hist), W=600,H=130,bw=W/buckets;
+    $("#hist").innerHTML=hist.map((h,i)=>{const bh=h?(h/hmax)*(H-10):0;
+      return `<rect x="${i*bw+3}" y="${H-bh}" width="${bw-6}" height="${bh}" fill="#3ef07f" opacity="0.85"/>`;}).join("");
+    $("#histlbl").textContent=`${s.length} solves · buckets of ${step}s · 0 → ${buckets*step}s`;
+  } else $("#histlbl").textContent="no timed solves yet";
+  // bounty table
+  const tb=$("#bounty tbody");
+  tb.innerHTML = (m.bounty_runs||[]).map(r=>`<tr>
+    <td>${new Date(r.time*1000).toLocaleString()}</td><td>${r.program||""}</td>
+    <td>${r.target||""}</td><td>${r.turns??""}</td>
+    <td>${r.duration_s?r.duration_s+"s":"—"}</td><td>${r.cost_usd?"$"+r.cost_usd.toFixed(2):"—"}</td></tr>`).join("")
+    || '<tr><td colspan=6 class="muted">no assessments logged yet</td></tr>';
+}
+load(); setInterval(load, 10000);
+</script>
+</body>
+</html>
