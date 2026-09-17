@@ -49,10 +49,11 @@ SPECIALISTS: dict[str, str] = {
     "misc": _COMMON + "\nMISC/unknown. Inspect the files and reason about the puzzle.",
 }
 
-# NYU-bench-style category strings -> our specialist keys.
+# Benchmark category strings (NYU / InterCode / picoCTF) -> our specialist keys.
 _ALIASES = {
     "cryptography": "crypto", "reverse": "rev", "reversing": "rev",
-    "binary exploitation": "pwn", "binary": "pwn", "forensic": "forensics",
+    "reverse engineering": "rev", "binary exploitation": "pwn", "binary": "pwn",
+    "forensic": "forensics", "web exploitation": "web", "general skills": "misc",
 }
 
 
