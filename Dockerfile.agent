@@ -6,8 +6,10 @@ FROM kalilinux/kali-rolling
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv pipx git curl wget jq \
+    python3 python3-pip python3-venv python3-dev pipx git curl wget jq \
     build-essential ruby ruby-dev golang cargo \
+    # headers for gmpy2/psutil/pwntools native builds
+    libgmp-dev libmpfr-dev libmpc-dev libssl-dev libffi-dev \
     # rev/pwn
     gdb binutils file ltrace strace \
     # forensics

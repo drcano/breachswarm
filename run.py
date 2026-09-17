@@ -15,6 +15,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from solver import Challenge, solve
+from specialists import route
 
 
 def load(dir_: Path) -> Challenge:
@@ -33,10 +34,28 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="folder of challenge subdirs")
     ap.add_argument("-o", "--out", default="results.jsonl")
+    ap.add_argument("--limit", type=int, help="max challenges to run")
+    ap.add_argument("--category", help="only run challenges routed to this specialist "
+                    "(crypto/rev/pwn/web/forensics/misc)")
+    ap.add_argument("--per-category", type=int, help="cap challenges per specialist "
+                    "(representative sampling across categories)")
     args = ap.parse_args()
 
-    dirs = sorted(p for p in Path(args.root).iterdir()
-                  if (p / "challenge.json").exists())
+    dirs = [p for p in sorted(Path(args.root).iterdir())
+            if (p / "challenge.json").exists()]
+    # filter/sample before running (cost control)
+    picked, seen = [], Counter()
+    for d in dirs:
+        spec = route(json.loads((d / "challenge.json").read_text()).get("category"))
+        if args.category and spec != args.category:
+            continue
+        if args.per_category and seen[spec] >= args.per_category:
+            continue
+        seen[spec] += 1
+        picked.append(d)
+        if args.limit and len(picked) >= args.limit:
+            break
+    dirs = picked
     results = []
     with open(args.out, "w") as f:
         for d in dirs:
