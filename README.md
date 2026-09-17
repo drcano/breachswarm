@@ -103,12 +103,23 @@ docker build -t ctf-agent:full   -f Dockerfile.agent .  # + pwn/web/decompile to
 | `server.py` + `static/` | full-stack web console |
 | `Dockerfile.lean` / `Dockerfile.agent` | sandbox images |
 
-## Toward real-world use
+## Real-world validation — it exploits a live target
 
-The same loop that solves CTF web challenges applies to bug-bounty recon and
-security research: scoped targets, a browser + HTTP toolkit, and an auditable trail
-of everything the agent did. Next: GhidraMCP for decompilation, a Playwright-driven
-web agent against deliberately-vulnerable targets, and a findings report generator.
+Beyond static CTF files, the web specialist was pointed at a **live**
+deliberately-vulnerable service (no local files — the bug-bounty setup). In 11
+turns it recon'd the app, found a hidden endpoint, confirmed Jinja2 SSTI
+(`{{7*7}}`→`49`), escalated to **remote code execution**
+(`{{ cycler.__init__.__globals__.os.popen(...) }}`), read the app internals, and
+exfiltrated the flag — then wrote a clean report of the chain
+([docs/ssti_demo_writeup.md](docs/ssti_demo_writeup.md)).
+
+```bash
+./demo_live.sh      # stands up the target, unleashes the agent, tears down
+```
+
+The same loop applies to authorised bug-bounty targets and security research:
+scoped hosts, an HTTP + browser toolkit, per-category network isolation, and a full
+auditable trail. Next: GhidraMCP for decompilation and a findings-report generator.
 
 See [REPORT.md](REPORT.md) for the full findings and [STATUS.md](STATUS.md) for the
 build log. `docs/how-it-works.html` is a visual walkthrough.
