@@ -1,34 +1,41 @@
 #!/bin/bash
-# Real-world demo: stand up a deliberately-vulnerable app and have the web
-# specialist find and exploit it autonomously (live target, not static files).
-# Proves the platform works for bug-bounty-style testing against a running host.
+# Real-world demo: stand up deliberately-vulnerable apps and have the web
+# specialist find and exploit them autonomously against a LIVE service (no local
+# files) — the bug-bounty setup. Proves the platform beyond static CTF challenges.
+#
+# Usage: ./demo_live.sh [ssti|sqli|both]   (default: both)
 set -e
 cd "$(dirname "$0")"
+WHICH="${1:-both}"
 
-echo "[*] building vulnerable target..."
 docker build -q -t vuln-target:latest targets/ >/dev/null
 
-echo "[*] starting target on the docker bridge..."
-docker rm -f vuln-target >/dev/null 2>&1 || true
-docker run -d --rm --name vuln-target vuln-target:latest >/dev/null
-sleep 3
-IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' vuln-target)
-echo "[*] target live at http://$IP:5000"
-
-mkdir -p challenges/live/ssti_demo/files
-cat > challenges/live/ssti_demo/challenge.json <<EOF
-{
-  "name": "live_ssti_demo",
-  "category": "Web Exploitation",
-  "prompt": "We stood up an internal build of StonksBot 3000. Find the hidden flag on the running service at http://$IP:5000/ . You are authorized to test this host.",
-  "flag": "flag{ss7i_l1v3_t4rg3t_pwn3d}",
-  "flag_pattern": "flag\\\\{[^}\\\\s]+\\\\}"
+run_demo() {  # name  app-file  flag
+  local name="$1" app="$2" flag="$3"
+  echo "[*] === $name ==="
+  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker run -d --rm --name "$name" -e APP="$app" vuln-target:latest >/dev/null
+  sleep 3
+  local ip; ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$name")
+  echo "[*] target live at http://$ip:5000"
+  local dir="challenges/live/$name"; mkdir -p "$dir/files"
+  ./.venv/bin/python - "$dir/challenge.json" "$name" "$ip" "$flag" <<'PY'
+import json, sys
+path, name, ip, flag = sys.argv[1:5]
+json.dump({
+    "name": name, "category": "Web Exploitation",
+    "prompt": f"Authorized test: recover the hidden flag from the StonksBot "
+              f"service running at http://{ip}:5000/ (endpoints include /login "
+              f"and /greet).",
+    "flag": flag, "flag_pattern": r"flag\{[^}\s]+\}",
+}, open(path, "w"), indent=2)
+PY
+  rm -rf "/tmp/$name" && mkdir -p "/tmp/$name" && ln -s "$(pwd)/$dir" "/tmp/$name/c"
+  CTF_SANDBOX=docker ./.venv/bin/python run.py "/tmp/$name" --max-turns 25 -o "results.$name.jsonl"
+  echo "[*] writeup: $dir/writeup.md"
+  docker rm -f "$name" >/dev/null 2>&1 || true
 }
-EOF
 
-echo "[*] unleashing the web specialist (network on)..."
-CTF_SANDBOX=docker ./.venv/bin/python run.py challenges/live --max-turns 20 -o results.live.jsonl
-
-echo "[*] writeup: challenges/live/ssti_demo/writeup.md"
-echo "[*] tearing down target..."
-docker rm -f vuln-target >/dev/null 2>&1 || true
+[ "$WHICH" = "ssti" ] || [ "$WHICH" = "both" ] && run_demo ssti_demo vuln_app.py  'flag{ss7i_l1v3_t4rg3t_pwn3d}'
+[ "$WHICH" = "sqli" ] || [ "$WHICH" = "both" ] && run_demo sqli_demo vuln_sqli.py 'flag{sql1_dump3d_by_the_agent}'
+echo "[*] done."

@@ -105,16 +105,23 @@ docker build -t ctf-agent:full   -f Dockerfile.agent .  # + pwn/web/decompile to
 
 ## Real-world validation — it exploits a live target
 
-Beyond static CTF files, the web specialist was pointed at a **live**
-deliberately-vulnerable service (no local files — the bug-bounty setup). In 11
-turns it recon'd the app, found a hidden endpoint, confirmed Jinja2 SSTI
-(`{{7*7}}`→`49`), escalated to **remote code execution**
-(`{{ cycler.__init__.__globals__.os.popen(...) }}`), read the app internals, and
-exfiltrated the flag — then wrote a clean report of the chain
-([docs/ssti_demo_writeup.md](docs/ssti_demo_writeup.md)).
+Beyond static CTF files, the web specialist was pointed at **live**
+deliberately-vulnerable services (no local files — the bug-bounty setup) and
+exploited two distinct vulnerability classes autonomously:
+
+- **SSTI → RCE** (11 turns): recon'd the app, found a hidden endpoint, confirmed
+  Jinja2 SSTI (`{{7*7}}`→`49`), escalated to remote code execution
+  (`{{ cycler.__init__.__globals__.os.popen(...) }}`), and read the flag.
+  → [docs/ssti_demo_writeup.md](docs/ssti_demo_writeup.md)
+- **SQL injection** (24 turns): column-counted a UNION, orchestrated `sqlmap`,
+  then — recognising a **boolean-blind** oracle — hand-wrote a binary-search
+  extraction script to dump `SELECT flag FROM secret`.
+  → [docs/sqli_demo_writeup.md](docs/sqli_demo_writeup.md)
+
+Each run ends with a clean, publishable writeup the agent generated itself.
 
 ```bash
-./demo_live.sh      # stands up the target, unleashes the agent, tears down
+./demo_live.sh          # stands up both targets, unleashes the agent, tears down
 ```
 
 The same loop applies to authorised bug-bounty targets and security research:

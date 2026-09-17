@@ -106,18 +106,22 @@ To prove the platform works beyond static CTF files, a deliberately-vulnerable
 Flask app (`targets/vuln_app.py`) was stood up as a live service and the **web
 specialist pointed at it with no local files** — exactly the bug-bounty setup.
 
-It autonomously, in 11 turns:
-1. Recon'd the homepage (`curl -is`), fingerprinted Flask/Werkzeug, and spotted a
-   "debug greeter" hint in an HTML comment.
-2. Brute-forced endpoint names and found `/greet`.
-3. Confirmed Jinja2 SSTI (`{{7*7}}` → `49`).
-4. Escalated to **SSTI remote code execution**
-   (`{{ cycler.__init__.__globals__.os.popen(...) }}`) to run shell commands on the
-   target, read the app source/config, and exfiltrate the flag.
+Two distinct vulnerability classes were exploited autonomously:
 
-It then produced a clean, publishable writeup of the whole chain
-(`docs/ssti_demo_writeup.md`). Reproduce with `./demo_live.sh`. This is the same
-loop that applies to authorised bug-bounty targets and security research.
+**SSTI → RCE (11 turns).** Recon'd the homepage, fingerprinted Flask/Werkzeug,
+found `/greet` by guessing, confirmed Jinja2 SSTI (`{{7*7}}`→`49`), then escalated
+to remote code execution (`{{ cycler.__init__.__globals__.os.popen(...) }}`) to run
+shell commands and exfiltrate the flag. → `docs/ssti_demo_writeup.md`
+
+**SQL injection (24 turns).** Confirmed injection on `user`, counted UNION columns,
+orchestrated `sqlmap`, and — correctly recognising a fixed-response
+**boolean-blind** oracle — hand-wrote a binary-search extraction script to dump
+`SELECT flag FROM secret` one character at a time. → `docs/sqli_demo_writeup.md`
+
+Each run produced a clean, publishable writeup. Reproduce both with `./demo_live.sh`.
+This is the same loop that applies to authorised bug-bounty targets and security
+research — and it shows the agent both driving standard tools (sqlmap) and writing
+bespoke exploit code when tools fall short.
 
 ## 5. Infrastructure notes
 
