@@ -48,6 +48,8 @@ async def main() -> None:
                     help="cap agent turns per challenge (cost control)")
     ap.add_argument("--concurrency", type=int, default=4,
                     help="challenges to solve in parallel (wallclock speedup)")
+    ap.add_argument("--retries", type=int, default=0,
+                    help="extra attempts per challenge on failure (recovers near-misses)")
     args = ap.parse_args()
 
     dirs = [p for p in sorted(Path(args.root).iterdir())
@@ -71,7 +73,7 @@ async def main() -> None:
         ch = load(d)
         async with sem:  # bound parallel solves (containers + LLM rate limits)
             try:
-                return await solve(ch, max_turns=args.max_turns)
+                return await solve(ch, max_turns=args.max_turns, retries=args.retries)
             except Exception as e:  # one bad challenge must not kill the batch
                 print(f"[ERROR ] {ch.name}: {type(e).__name__}: {str(e)[:120]}")
                 return Result(ch.name, route(ch.category), False, False, None, 0, None)

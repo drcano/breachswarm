@@ -10,8 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils gdb radare2 \
     exiftool binwalk foremost p7zip-full poppler-utils tshark steghide \
     hashcat john ruby ruby-dev \
+    fcrackzip pdfcrack wordlists \
     libgmp-dev libmpfr-dev libmpc-dev libssl-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# rockyou wordlist for hash/archive/steg cracking (john, hashcat, fcrackzip,
+# stegseek). Kali ships it gzipped; unpack once and expose at a stable path.
+RUN gunzip -kf /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || true
+ENV WORDLIST=/usr/share/wordlists/rockyou.txt
 
 RUN pip3 install --break-system-packages \
     pycryptodome sympy z3-solver factordb-python xortool requests

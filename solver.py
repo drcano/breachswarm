@@ -80,7 +80,7 @@ def _block_text(block) -> str | None:
     return None
 
 
-async def solve(ch: Challenge, max_turns: int = 40) -> Result:
+async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
     with make_sandbox(ch.workdir) as sb:
         # Recon first: deterministic probes sharpen routing and brief the specialist.
         # Its commands land in sb.actions, so they show up in the audit trail.
@@ -103,25 +103,31 @@ async def solve(ch: Challenge, max_turns: int = 40) -> Result:
                 allowed_tools=["mcp__ctf__sandbox_bash"],
                 max_turns=max_turns,
             )
-            task = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"
+            base = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"
                     "The challenge files are in your current working directory. Find the flag.")
-            async for msg in query(prompt=task, options=options):
-                if isinstance(msg, AssistantMessage):
-                    turns += 1  # counts even when we auto-terminate before ResultMessage
-                if isinstance(msg, ResultMessage):
-                    turns, cost = msg.num_turns, msg.total_cost_usd
-                for block in getattr(msg, "content", []) or []:
-                    text = _block_text(block)
-                    if not text:
-                        continue
-                    # Keep assistant reasoning for the writeup; tool output is already
-                    # in sb.actions, so only reasoning blocks are added here.
-                    if isinstance(block, TextBlock):
-                        thoughts.append({"t": time.time(), "kind": "thought", "text": text})
-                    if hit := find_flag(text, ch.flag_pattern):
-                        found = hit
+            # Up to (1 + retries) attempts; each retry nudges a different approach.
+            for attempt in range(retries + 1):
+                task = base if attempt == 0 else base + (
+                    "\n\nYour previous attempt did NOT find the flag. Try a different "
+                    "technique, tool, or encoding, and re-check your decoding step.")
+                async for msg in query(prompt=task, options=options):
+                    if isinstance(msg, AssistantMessage):
+                        turns += 1  # accumulates across attempts
+                    if isinstance(msg, ResultMessage) and msg.total_cost_usd:
+                        cost = (cost or 0) + msg.total_cost_usd
+                    for block in getattr(msg, "content", []) or []:
+                        text = _block_text(block)
+                        if not text:
+                            continue
+                        # Tool output is already in sb.actions; keep only reasoning here.
+                        if isinstance(block, TextBlock):
+                            thoughts.append({"t": time.time(), "kind": "thought", "text": text})
+                        if hit := find_flag(text, ch.flag_pattern):
+                            found = hit
+                    if found:
+                        break  # auto-terminate once the flag appears
                 if found:
-                    break  # auto-terminate: stop burning turns once the flag appears
+                    break
 
         # Merge command log + reasoning into one chronological trace.
         trace = sorted(sb.actions + thoughts, key=lambda e: e["t"])

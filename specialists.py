@@ -17,7 +17,8 @@ SPECIALISTS: dict[str, str] = {
         "\nCRYPTO focus. Triage unknown blobs with `ares`/`ciphey`. For RSA use "
         "RsaCtfTool (/opt/RsaCtfTool) and factordb. Hard math (lattice, discrete "
         "log, ECC) -> write a .sage script. Hashes -> hashcat/john. Custom "
-        "ciphers/PRNGs -> z3. Glue with pycryptodome; print decrypted output."
+        "ciphers/PRNGs -> z3. Glue with pycryptodome; print decrypted output. "
+        "Crack hashes with `hashcat`/`john` against /usr/share/wordlists/rockyou.txt."
     ),
     "rev": _COMMON + (
         "\nREVERSING focus. Start with file/strings/checksec. Decompile with "
@@ -40,7 +41,8 @@ SPECIALISTS: dict[str, str] = {
         "\nFORENSICS focus. Triage: file, strings (-e l and -e b too), binwalk -Me. "
         "Metadata: exiftool -a -u -G1. Steg: zsteg (PNG/BMP), stegseek+rockyou "
         "(JPEG). Memory: volatility3. Pcaps: tshark. Archives/PDF/Office: 7z, "
-        "oletools, poppler."
+        "oletools, poppler. Password-protected zip/pdf: fcrackzip/pdfcrack/"
+        "zip2john+john against /usr/share/wordlists/rockyou.txt."
     ),
     "osint": _COMMON + (
         "\nOSINT focus. STRICT SCOPE: only look up the exact usernames/emails/"
