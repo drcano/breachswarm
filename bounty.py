@@ -21,7 +21,8 @@ from claude_agent_sdk import (query, ClaudeAgentOptions, tool,
 from sandbox import make_sandbox
 from scope import Scope
 from specialists import SPECIALISTS
-from writeup import save_audit, _render, generate as _writeup
+from writeup import save_audit
+from report import generate_report
 
 METRICS = "bounty_metrics.jsonl"
 
@@ -77,7 +78,7 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
         trace = sorted(sb.actions + thoughts, key=lambda e: e["t"])
 
     save_audit(workdir / "audit.jsonl", trace)
-    report = await _writeup(f"bounty:{scope.program}", f"Target {target}", trace, True, None)
+    report = await generate_report(scope.program, target, trace)
     (workdir / "findings.md").write_text(report)
     row = {"time": time.time(), "program": scope.program, "target": target,
            "turns": turns, "cost_usd": cost, "report": str(workdir / "findings.md")}
