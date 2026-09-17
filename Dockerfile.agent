@@ -60,5 +60,10 @@ RUN wget -q https://github.com/RickdeJager/stegseek/releases/latest/download/ste
 RUN pipx install maigret && pipx install sherlock-project && pipx install theHarvester || \
     pip3 install --break-system-packages maigret sherlock-project theHarvester
 
-ENV PATH="/root/go/bin:/root/.cargo/bin:${PATH}"
+ENV PATH="/root/go/bin:/root/.cargo/bin:/root/.local/bin:${PATH}"
+# The sandbox runs `bash -lc`, and a login shell resets PATH from /etc/profile —
+# so go/cargo/pipx bins (ffuf, nuclei, maigret, …) would be invisible. Symlink
+# them onto the always-present /usr/local/bin so every shell can find them.
+RUN for d in /root/go/bin /root/.cargo/bin /root/.local/bin; do \
+      [ -d "$d" ] && ln -sf "$d"/* /usr/local/bin/ 2>/dev/null || true; done; true
 WORKDIR /work
