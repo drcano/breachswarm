@@ -257,10 +257,10 @@ flowchart TD
             <td><div class="bar" style="--v:100%"><i></i></div></td><td class="num">8 / 8</td></tr>
           <tr><td>Forensics <span class="tag">sample</span></td><td class="num">9 / 10</td>
             <td><div class="bar" style="--v:90%"><i></i></div></td><td class="num">9 / 10</td></tr>
-          <tr><td>Reversing <span class="tag">sample</span></td><td class="num">6 / 10</td>
-            <td><div class="bar" style="--v:60%"><i></i></div></td><td class="num">6 / 10</td></tr>
-          <tr class="total"><td>Total · 4 categories</td><td class="num">36 / 47</td>
-            <td><div class="bar" style="--v:77%"><i></i></div></td><td class="num">37 / 47</td></tr>
+          <tr><td>Reversing <span class="tag">sample</span></td><td class="num">8 / 10</td>
+            <td><div class="bar" style="--v:80%"><i></i></div></td><td class="num">8 / 10</td></tr>
+          <tr class="total"><td>Total · 4 categories</td><td class="num">38 / 47</td>
+            <td><div class="bar" style="--v:81%"><i></i></div></td><td class="num">39 / 47</td></tr>
         </tbody>
       </table>
     </div>
@@ -276,14 +276,18 @@ flowchart TD
 
     <h3>Where it still fails</h3>
     <ul class="notes">
-      <li><b class="s-bad">Placeholder flags.</b> The agent sometimes emits
-        <code>picoCTF{...}</code> literally instead of a real result — should count as
-        "gave up," and a stricter check can reject placeholders.</li>
-      <li><b class="s-bad">Multi-line parsing.</b> A base64 flag split across lines got
-        mis-stitched — a robustness gap, not a reasoning one.</li>
+      <li><b class="s-warn">Dead remote servers.</b> The Web tasks point at live
+        picoCTF hosts (now decommissioned) with no local files, so they're
+        unsolvable offline — a dataset limit, not a solver gap. The real-world
+        platform targets live authorised hosts instead.</li>
+      <li><b class="s-bad">Remote-service pwn.</b> Some pwn challenges need a running
+        service; local-only ones (source provided) fare better.</li>
       <li><b class="s-warn">Case near-miss.</b> Cracked, wrong case. Content case is
         genuinely unknowable to the solver, so it's reported, not chased.</li>
     </ul>
+    <p style="margin-top:14px">A balanced 6-category run (38 tasks, full toolset,
+      retries) scored <b>27/38 (71%)</b> — 75% once the dead-server Web tasks are
+      excluded — in 1164s at concurrency 5.</p>
   </section>
 
   <section id="usage">

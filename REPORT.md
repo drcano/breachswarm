@@ -50,18 +50,30 @@ and a worthless one.)
 
 ## 3. Results
 
-| Category | Strict | Effective (incl. near-miss) |
-|---|---|---|
-| Crypto (full 19-task category) | **13/19 (68%)** | 14/19 (74%) |
-| General Skills (8 sampled) | **8/8 (100%)** | 8/8 (100%) |
-| Forensics (10 sampled) | **9/10 (90%)** | 9/10 (90%) |
-| Reversing (10 sampled) | **6/10 (60%)** | 6/10 (60%) |
-| **Total** | **36/47 (77%)** | **37/47 (79%)** |
+**Balanced 6-category run** (full toolset image, expert prompts, expanded recon,
+retries; 38 tasks, ran in 1164s at concurrency 5):
 
-Crypto is the full category; the other three are samples. Forensics was the
-strongest category (pcap analysis, LSB steg, metadata, `grep`); reversing solved
-static-analysis and simple-logic challenges and missed a few on multi-line output
-parsing and one runtime error.
+| Category | Strict | Notes |
+|---|---|---|
+| General Skills | 8/8 (100%) | base conv, strings, grep, scripting |
+| Forensics | 7/8 (88%) | steg, pcap, metadata, carving |
+| Reversing | 6/8 (75%) | static analysis + simple logic |
+| Crypto | 5/8 (63%) | RSA, classical, hashes |
+| Pwn | 1/4 (25%) | some need a live remote service |
+| Web | 0/2 (0%) | **live servers offline — see below** |
+| **Total** | **27/38 (71%)** | 75% excluding the dead-server web tasks |
+
+**Deeper per-category runs** (larger samples): Crypto **13/19 (68%)** full category;
+Forensics **9/10 (90%)**; Reversing **8/10 (80%)**.
+
+### A real limitation, named honestly
+
+The two Web tasks (and some Pwn) point at **live picoCTF servers**
+(`jupiter.challenges.picoctf.org`, `mercury.picoctf.net:34561`) with no local
+files. Those hosts are long decommissioned and the offline sandbox has no route to
+them — so Web 0/2 is a **dataset/harness limitation, not a solver weakness**. On
+self-contained challenges the effective rate is ~75%+. This is exactly the class of
+challenge the *real-world* platform (below) targets, against live authorised hosts.
 
 Real solves include small-N RSA, large-e RSA, triple-RSA, X.509 certificate parsing,
 Caesar/ROT, Vigenère, and transposition ciphers; plus base conversions, `strings`,

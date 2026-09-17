@@ -18,3 +18,7 @@ server.log
 run.all.log
 run.rev.log
 run_all.sh
+run.allstar.log
+run_allstar.sh
+build.full.log
+build.lean2.log

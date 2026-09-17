@@ -50,7 +50,7 @@ def main() -> None:
             "flag": t["gold"],
             # InterCode flags are all picoCTF{...}; pin the pattern so the auto-
             # terminator doesn't fire on encoded look-alikes (e.g. rot13 cvpbPGS{}).
-            "flag_pattern": r"picoCTF\{[^}]+\}",
+            "flag_pattern": r"picoCTF\{[^}\s`]+\}",
         }, indent=2))
         n += 1
     print(f"wrote {n} challenges to {out}")

@@ -25,13 +25,15 @@ challenge ─▶ recon (deterministic probes) ─▶ orchestrator ─▶ special
 | General Skills | 8/8 |
 | Forensics | 9/10 (90%) |
 | Reversing | 8/10 (80%) |
-| **6-category parallel sweep (38 tasks)** | **27/38 (71%)** — 907s @ concurrency 5 |
+| **Balanced 6-category run (38 tasks, full toolset + retries)** | **27/38 (71%)** — 75% excluding dead-server web tasks; 1164s @ concurrency 5 |
 
 Strict = exact match to the gold flag (the same check picoCTF runs). Real solves
 include small-N/large-e/triple RSA, X.509 cert parsing, Vigenère, Morse,
 transposition, LSB steg, pcap analysis, and static reversing. Numbers are the
-honest, uncontaminated results (see the leak fix below). For reference, published
-CTF agents score ~22% on the harder NYU-CTF / Cybench sets.
+honest, uncontaminated results (see the leak fix below). The Web tasks target live
+picoCTF servers that are now offline, so they're unsolvable in an offline sandbox —
+a dataset limit, not a solver gap. For reference, published CTF agents score ~22% on
+the harder NYU-CTF / Cybench sets.
 
 ## What makes it work
 
