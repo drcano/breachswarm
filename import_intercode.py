@@ -48,6 +48,9 @@ def main() -> None:
             "category": (t.get("tags") or ["misc"])[0],
             "prompt": t["query"],
             "flag": t["gold"],
+            # InterCode flags are all picoCTF{...}; pin the pattern so the auto-
+            # terminator doesn't fire on encoded look-alikes (e.g. rot13 cvpbPGS{}).
+            "flag_pattern": r"picoCTF\{[^}]+\}",
         }, indent=2))
         n += 1
     print(f"wrote {n} challenges to {out}")
