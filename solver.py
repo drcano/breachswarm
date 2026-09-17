@@ -86,33 +86,42 @@ async def solve(ch: Challenge, max_turns: int = 40) -> Result:
         # Its commands land in sb.actions, so they show up in the audit trail.
         brief = recon(sb, ch.prompt)
         spec = route(ch.category or brief["suggested"])
-        options = ClaudeAgentOptions(
-            system_prompt=SPECIALISTS[spec],
-            mcp_servers={"ctf": _sandbox_server(sb)},
-            allowed_tools=["mcp__ctf__sandbox_bash"],
-            max_turns=max_turns,
-        )
-        task = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"
-                "The challenge files are in your current working directory. Find the flag.")
 
         found, turns, cost, thoughts = None, 0, None, []
-        async for msg in query(prompt=task, options=options):
-            if isinstance(msg, AssistantMessage):
-                turns += 1  # counts even when we auto-terminate before ResultMessage
-            if isinstance(msg, ResultMessage):
-                turns, cost = msg.num_turns, msg.total_cost_usd
-            for block in getattr(msg, "content", []) or []:
-                text = _block_text(block)
-                if not text:
-                    continue
-                # Keep assistant reasoning for the writeup; tool output is already
-                # in sb.actions, so only reasoning blocks are added here.
-                if isinstance(block, TextBlock):
-                    thoughts.append({"t": time.time(), "kind": "thought", "text": text})
-                if hit := find_flag(text, ch.flag_pattern):
-                    found = hit
-            if found:
-                break  # auto-terminate: stop burning turns once the flag appears
+
+        # Fast path: recon (ls/file/strings) may have already surfaced the flag
+        # (very common in forensics/general). Solve with zero LLM turns.
+        for act in sb.actions:
+            if hit := find_flag(act.get("output", ""), ch.flag_pattern):
+                found = hit
+                break
+
+        if not found:
+            options = ClaudeAgentOptions(
+                system_prompt=SPECIALISTS[spec],
+                mcp_servers={"ctf": _sandbox_server(sb)},
+                allowed_tools=["mcp__ctf__sandbox_bash"],
+                max_turns=max_turns,
+            )
+            task = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"
+                    "The challenge files are in your current working directory. Find the flag.")
+            async for msg in query(prompt=task, options=options):
+                if isinstance(msg, AssistantMessage):
+                    turns += 1  # counts even when we auto-terminate before ResultMessage
+                if isinstance(msg, ResultMessage):
+                    turns, cost = msg.num_turns, msg.total_cost_usd
+                for block in getattr(msg, "content", []) or []:
+                    text = _block_text(block)
+                    if not text:
+                        continue
+                    # Keep assistant reasoning for the writeup; tool output is already
+                    # in sb.actions, so only reasoning blocks are added here.
+                    if isinstance(block, TextBlock):
+                        thoughts.append({"t": time.time(), "kind": "thought", "text": text})
+                    if hit := find_flag(text, ch.flag_pattern):
+                        found = hit
+                if found:
+                    break  # auto-terminate: stop burning turns once the flag appears
 
         # Merge command log + reasoning into one chronological trace.
         trace = sorted(sb.actions + thoughts, key=lambda e: e["t"])

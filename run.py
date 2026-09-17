@@ -46,6 +46,8 @@ async def main() -> None:
                     "(representative sampling across categories)")
     ap.add_argument("--max-turns", type=int, default=40,
                     help="cap agent turns per challenge (cost control)")
+    ap.add_argument("--concurrency", type=int, default=4,
+                    help="challenges to solve in parallel (wallclock speedup)")
     args = ap.parse_args()
 
     dirs = [p for p in sorted(Path(args.root).iterdir())
@@ -63,15 +65,22 @@ async def main() -> None:
         if args.limit and len(picked) >= args.limit:
             break
     dirs = picked
-    results = []
-    with open(args.out, "w") as f:
-        for d in dirs:
-            ch = load(d)
+    sem = asyncio.Semaphore(max(1, args.concurrency))
+
+    async def run_one(d):
+        ch = load(d)
+        async with sem:  # bound parallel solves (containers + LLM rate limits)
             try:
-                r = await solve(ch, max_turns=args.max_turns)
+                return await solve(ch, max_turns=args.max_turns)
             except Exception as e:  # one bad challenge must not kill the batch
-                r = Result(ch.name, route(ch.category), False, False, None, 0, None)
                 print(f"[ERROR ] {ch.name}: {type(e).__name__}: {str(e)[:120]}")
+                return Result(ch.name, route(ch.category), False, False, None, 0, None)
+
+    results = []
+    tasks = [asyncio.create_task(run_one(d)) for d in dirs]
+    with open(args.out, "w") as f:
+        for coro in asyncio.as_completed(tasks):  # write as each finishes
+            r = await coro
             results.append(r)
             f.write(json.dumps(asdict(r)) + "\n")
             f.flush()  # crash-safe: keep partial results

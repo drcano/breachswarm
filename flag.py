@@ -7,14 +7,30 @@ the primary check.
 import re
 
 # Common CTF flag shapes. A specific challenge overrides with its own regex.
-DEFAULT_FLAG_RE = re.compile(r"(?:flag|ctf|pico|[A-Za-z0-9_]{2,10})\{[^}\n]{1,200}\}")
+# Flag bodies never contain whitespace or backticks; excluding them stops the
+# extractor from matching the agent's *prose about* a flag (e.g. "picoCTF{` ... `}")
+# and auto-terminating on garbage before the real solve.
+DEFAULT_FLAG_RE = re.compile(r"(?:flag|ctf|pico|[A-Za-z0-9_]{2,10})\{[^}\s`]{1,200}\}")
+
+
+# Obvious non-answers the model writes when talking *about* the flag format.
+_PLACEHOLDERS = {"...", "…", "flag", "flaghere", "flag_here", "xxx", "example",
+                 "redacted", "your_flag_here", "insert_flag_here"}
+
+
+def _is_placeholder(flag: str) -> bool:
+    body = flag[flag.find("{") + 1:flag.rfind("}")].strip().lower()
+    return body in _PLACEHOLDERS or "..." in body or "…" in body
 
 
 def find_flag(text: str, pattern: str | None = None) -> str | None:
-    """Return the first flag-shaped substring in `text`, or None."""
+    """Return the first real flag-shaped substring in `text`, skipping obvious
+    placeholders the model emits when describing the format."""
     rx = re.compile(pattern) if pattern else DEFAULT_FLAG_RE
-    m = rx.search(text or "")
-    return m.group(0) if m else None
+    for m in rx.finditer(text or ""):
+        if not _is_placeholder(m.group(0)):
+            return m.group(0)
+    return None
 
 
 def is_correct(candidate: str | None, real_flag: str | None) -> bool:
@@ -47,6 +63,10 @@ def demo() -> None:
     assert is_correct("flag{x}", None) is True          # live mode: shape is enough
     assert is_correct(None, None) is False
     # near-miss: cracked but mis-formatted
+    # placeholders are not real flags
+    assert find_flag("the flag is picoCTF{...}") is None
+    assert find_flag("submit picoCTF{your_flag_here}") is None
+    assert find_flag("picoCTF{r34l_0ne} not picoCTF{...}") == "picoCTF{r34l_0ne}"
     assert is_near_miss("PICOCTF{THENUMBERSMASON}", "picoCTF{thenumbersmason}") is True
     assert is_near_miss("flag{x}", "flag{x}") is False   # strict solve, not a near-miss
     assert is_near_miss("picoCTF{wrong}", "picoCTF{right}") is False
