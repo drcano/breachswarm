@@ -53,7 +53,7 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
 
     import os
     os.environ["CTF_SANDBOX"] = backend
-    workdir = Path("bounty_runs") / f"{int(time.time())}"
+    workdir = (Path("bounty_runs") / f"{int(time.time())}").resolve()
     (workdir / "files").mkdir(parents=True, exist_ok=True)
 
     with make_sandbox(workdir / "files", network=True) as sb:
