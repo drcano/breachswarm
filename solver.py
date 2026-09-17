@@ -21,10 +21,11 @@ from pathlib import Path
 
 from claude_agent_sdk import (
     query, ClaudeAgentOptions, tool, create_sdk_mcp_server,
+    AssistantMessage, TextBlock, ToolResultBlock, ResultMessage,
 )
 
 from flag import find_flag, is_correct
-from sandbox import Sandbox
+from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
 from writeup import generate, save_audit
 
@@ -46,11 +47,12 @@ class Result:
     solved: bool
     flag: str | None
     turns: int
+    cost_usd: float | None = None
     writeup_path: str | None = None
     audit_path: str | None = None
 
 
-def _sandbox_server(sb: Sandbox):
+def _sandbox_server(sb):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool."""
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
           {"command": str})
@@ -61,27 +63,46 @@ def _sandbox_server(sb: Sandbox):
     return create_sdk_mcp_server(name="ctf", version="0.1", tools=[sandbox_bash])
 
 
+def _block_text(block) -> str | None:
+    """Pull text out of an assistant TextBlock or a ToolResultBlock (flags often
+    land only in raw command output)."""
+    if isinstance(block, TextBlock):
+        return block.text
+    if isinstance(block, ToolResultBlock):
+        c = block.content
+        if isinstance(c, str):
+            return c
+        if isinstance(c, list):
+            return "\n".join(p.get("text", "") for p in c if isinstance(p, dict))
+    return None
+
+
 async def solve(ch: Challenge, max_turns: int = 40) -> Result:
     spec = route(ch.category)
-    with Sandbox(ch.workdir) as sb:
+    with make_sandbox(ch.workdir) as sb:
         options = ClaudeAgentOptions(
             system_prompt=SPECIALISTS[spec],
             mcp_servers={"ctf": _sandbox_server(sb)},
             allowed_tools=["mcp__ctf__sandbox_bash"],
             max_turns=max_turns,
         )
-        task = f"Challenge: {ch.name}\n\n{ch.prompt}\n\nFiles are in /work. Find the flag."
+        task = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n"
+                "The challenge files are in your current working directory. Find the flag.")
 
-        found, turns, thoughts = None, 0, []
+        found, turns, cost, thoughts = None, 0, None, []
         async for msg in query(prompt=task, options=options):
-            turns += 1
-            # Scan every text block (assistant reasoning + tool output) for a flag,
-            # and keep the reasoning for the audit trace / writeup.
+            if isinstance(msg, AssistantMessage):
+                turns += 1  # counts even when we auto-terminate before ResultMessage
+            if isinstance(msg, ResultMessage):
+                turns, cost = msg.num_turns, msg.total_cost_usd
             for block in getattr(msg, "content", []) or []:
-                text = getattr(block, "text", None)
+                text = _block_text(block)
                 if not text:
                     continue
-                thoughts.append({"t": time.time(), "kind": "thought", "text": text})
+                # Keep assistant reasoning for the writeup; tool output is already
+                # in sb.actions, so only reasoning blocks are added here.
+                if isinstance(block, TextBlock):
+                    thoughts.append({"t": time.time(), "kind": "thought", "text": text})
                 if hit := find_flag(text, ch.flag_pattern):
                     found = hit
             if found:
@@ -98,5 +119,5 @@ async def solve(ch: Challenge, max_turns: int = 40) -> Result:
     writeup_path = out / "writeup.md"
     save_audit(audit_path, trace)
     writeup_path.write_text(await generate(ch.name, ch.prompt, trace, solved, found))
-    return Result(ch.name, spec, solved, found, turns,
+    return Result(ch.name, spec, solved, found, turns, cost,
                   str(writeup_path), str(audit_path))

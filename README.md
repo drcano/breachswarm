@@ -19,12 +19,31 @@ challenge.json ─▶ route() ─▶ specialist (system prompt + sandbox_bash to
 - `run.py` — batch a folder, write `results.jsonl`, print solve rate.
 - `../Dockerfile.agent` — the sandbox image (Kali + ranked tools).
 
-## Run
+## Setup
 ```bash
-docker build -t ctf-agent:latest -f ../Dockerfile.agent ..
-pip install claude-agent-sdk           # pin the version; verify solver.py imports
-python3 run.py path/to/challenges/
+python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
+# needs the `claude` CLI on PATH (the SDK drives it)
 ```
+
+## Run
+Two sandbox backends, chosen by `CTF_SANDBOX` (default `docker`):
+
+```bash
+# local backend — runs commands on the host in the challenge dir.
+# NO isolation: trusted challenges only (crypto/forensics/misc), never pwn/rev.
+CTF_SANDBOX=local ./.venv/bin/python run.py examples/
+
+# docker backend — one isolated container per challenge (needs a docker runtime)
+docker build -t ctf-agent:latest -f Dockerfile.agent .
+./.venv/bin/python run.py challenges/
+```
+
+Each solve writes `audit.jsonl` (deterministic log of every command + reasoning)
+and `writeup.md` (LLM narration of that log) into the challenge dir.
+
+**Status:** end-to-end pipeline works on the local backend (solves the base64
+smoke test in `examples/`). Docker backend is written but untested — no runtime
+installed yet.
 
 ## Deliberately not built yet (add when the baseline shows you need it)
 - **Rev/pwn/web MCP tools** (GhidraMCP, pwndbg-mcp, Playwright MCP) — wire into

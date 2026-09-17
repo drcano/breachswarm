@@ -44,8 +44,9 @@ async def main() -> None:
             results.append(r)
             f.write(json.dumps(asdict(r)) + "\n")
             f.flush()  # crash-safe: keep partial results
+            cost = f" ${r.cost_usd:.3f}" if r.cost_usd else ""
             print(f"[{'SOLVED' if r.solved else 'fail  '}] {r.name} "
-                  f"({r.specialist}, {r.turns} turns) {r.flag or ''}")
+                  f"({r.specialist}, {r.turns} turns{cost}) {r.flag or ''}")
 
     n = len(results)
     solved = sum(r.solved for r in results)

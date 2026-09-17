@@ -1,0 +1,6 @@
+{
+  "name": "smoke_base64",
+  "category": "crypto",
+  "prompt": "We intercepted this encoded string in cipher.txt. Decode it to recover the flag.",
+  "flag": "flag{l0ssy_b4se64_w4rmup}"
+}
