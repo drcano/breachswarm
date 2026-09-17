@@ -101,7 +101,13 @@ docker build -t ctf-agent:full   -f Dockerfile.agent .  # + pwn/web/decompile to
 | `writeup.py` | audit-trace → human writeup |
 | `run.py` | parallel batch runner + live solve-rate |
 | `server.py` + `static/` | full-stack web console |
+| `targets/` + `demo_live.sh` | live vulnerable apps for the real-world demos |
+| `test_ctf_agent.py` | dependency-free unit tests for the logic core |
 | `Dockerfile.lean` / `Dockerfile.agent` | sandbox images |
+
+```bash
+./.venv/bin/python test_ctf_agent.py     # 6 test groups, no deps
+```
 
 ## Real-world validation — it exploits a live target
 
