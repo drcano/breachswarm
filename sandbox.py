@@ -60,19 +60,33 @@ class DockerSandbox(_Base):
     """One container per challenge, workspace mounted at /work."""
 
     def __init__(self, workdir, image: str = IMAGE, timeout: int = 60,
-                 network: bool = False):
+                 network: bool = False, network_name: str | None = None,
+                 proxy_url: str | None = None):
         super().__init__(workdir, timeout)
         self.image = image
         self.network = network
+        self.network_name = network_name   # attach to a specific docker network
+        self.proxy_url = proxy_url          # force all egress through this proxy
         self.name = f"ctf-{uuid.uuid4().hex[:8]}"
 
     def __enter__(self):
         # Security policy: no network by default, so an untrusted challenge binary
         # (pwn/rev/forensics) can't exfiltrate or call home. Web/osint pass
-        # network=True to reach their (authorised) targets.
-        net = [] if self.network else ["--network", "none"]
+        # network=True to reach their (authorised) targets. For real-world work,
+        # network_name pins an internal-only network whose sole egress is proxy_url
+        # (see bounty.py --enforce) so scope is enforced at the wire, no bypass.
+        if self.network_name:
+            net = ["--network", self.network_name]
+        elif self.network:
+            net = []
+        else:
+            net = ["--network", "none"]
+        env = []
+        if self.proxy_url:
+            for v in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+                env += ["-e", f"{v}={self.proxy_url}"]
         subprocess.run(
-            ["docker", "run", "-d", "--rm", "--name", self.name, *net,
+            ["docker", "run", "-d", "--rm", "--name", self.name, *net, *env,
              "-v", f"{self.workdir}:/work", "-w", "/work",
              self.image, "sleep", "infinity"],
             check=True, capture_output=True,
@@ -95,8 +109,11 @@ class DockerSandbox(_Base):
         return False
 
 
-def make_sandbox(workdir, backend: str | None = None, network: bool = False, **kw) -> _Base:
+def make_sandbox(workdir, backend: str | None = None, network: bool = False,
+                 network_name: str | None = None, proxy_url: str | None = None,
+                 **kw) -> _Base:
     backend = backend or os.environ.get("CTF_SANDBOX", "docker")
     if backend == "local":
         return LocalSandbox(workdir, **kw)          # local has host network anyway
-    return DockerSandbox(workdir, network=network, **kw)
+    return DockerSandbox(workdir, network=network, network_name=network_name,
+                         proxy_url=proxy_url, **kw)

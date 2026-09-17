@@ -29,3 +29,4 @@ bounty_runs/
 bounty_metrics.jsonl
 scope.json
 llm_bot.log
+scope.test.json
