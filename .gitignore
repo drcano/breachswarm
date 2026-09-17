@@ -1,13 +1,14 @@
 __pycache__/
 *.pyc
 .venv/
-# solver outputs
+# solver outputs — keep only the merged evidence file
 results.jsonl
-results.crypto.jsonl
-results.misc.jsonl
+results.*.jsonl
+!results.local.jsonl
 challenges/
 **/audit.jsonl
 **/writeup.md
 build.log
 build.lean.log
+run.*.log
 .env

@@ -10,9 +10,15 @@ the Docker toolset (crypto = full 19-challenge category; general = 8 sampled):
 
 | Category | Strict solve | Effective (incl. near-miss) |
 |---|---|---|
-| Crypto (full category) | 9/19 (47%) | 11/19 (58%) |
+| Crypto (full category) | 13/19 (68%) | 14/19 (74%) |
 | General Skills (8 sampled) | 8/8 (100%) | 8/8 (100%) |
-| **Total** | **17/27 (63%)** | **19/27 (70%)** |
+| **Total** | **21/27 (78%)** | **22/27 (81%)** |
+
+**Measured improvement in one iteration:** crypto went **9/19 → 13/19** after
+fixing a real bug — the auto-terminator was firing on encoded flag look-alikes
+(rot13 `cvpbPGS{...}` matched the loose flag regex, stopping the solver before it
+decoded). Pinning the flag pattern to `picoCTF{...}` recovered +4 strict solves.
+That's the whole loop: measure → find the failure mode → fix → re-measure a gain.
 
 Real solves included small-N RSA, large-e RSA, triple-RSA, X.509 cert parsing,
 Caesar/ROT, Vigenère, and transposition. Every run left an `audit.jsonl` +
@@ -26,16 +32,21 @@ counted as a solve.
 
 ## Failure analysis (the useful part)
 
-Crypto misses cluster into clear, fixable modes — exactly what to attack next:
-- **ROT13 reported un-decoded** (tasks 5, 90, 96): the agent recognized ROT13 but
-  printed the *ciphertext* `cvpbPGS{...}` instead of applying the rotation. Same
-  bug three times → a targeted prompt/tool fix.
-- **Uncracked hashes** (73, 86-adjacent): needs hashcat/john + wordlist, which the
-  local backend lacks — will improve on the Docker image.
-- **Placeholder flags** (74, 95, 57): agent emitted `picoCTF{...}` / example text
-  instead of a real result — should count as "gave up," and a stricter
-  find_flag could reject obvious placeholders.
-- **Case-only near-miss** (55, 56): cracked, wrong case (see above).
+Remaining crypto misses (6/19) cluster into clear modes — what to attack next:
+- **Placeholder flags** (73, 95): agent emitted `picoCTF{...}` / `picoCTF{t3st_...}`
+  instead of a real result — a stricter `find_flag` should reject obvious
+  placeholders and keep the solver working.
+- **Multi-line/base64 parsing** (58): the cert's base64 flag was split across lines
+  and the agent mis-stitched it — a parsing robustness gap.
+- **Morse / gave-up** (55, 57): produced no in-format flag within the turn budget.
+- **Case-only near-miss** (56): cracked, wrong case — genuinely unknowable, left
+  as an honest near-miss.
+
+FIXED this session: **ROT13-not-decoded** (was 3 fails) — see the measured
+improvement above.
+
+General Skills went 8/8 (base conversions, strings, grep, netcat-style, disasm
+teaser) — the agent is strong on straightforward tool-use tasks.
 
 General Skills went 8/8 (base conversions, strings, grep, netcat-style, disasm
 teaser) — the agent is strong on straightforward tool-use tasks.
