@@ -59,16 +59,20 @@ class LocalSandbox(_Base):
 class DockerSandbox(_Base):
     """One container per challenge, workspace mounted at /work."""
 
-    def __init__(self, workdir, image: str = IMAGE, timeout: int = 60):
+    def __init__(self, workdir, image: str = IMAGE, timeout: int = 60,
+                 network: bool = False):
         super().__init__(workdir, timeout)
         self.image = image
+        self.network = network
         self.name = f"ctf-{uuid.uuid4().hex[:8]}"
 
     def __enter__(self):
-        # ponytail: no --network by default (crypto/rev/forensics need none).
-        # Web/pwn: attach the target via a shared network when you wire those up.
+        # Security policy: no network by default, so an untrusted challenge binary
+        # (pwn/rev/forensics) can't exfiltrate or call home. Web/osint pass
+        # network=True to reach their (authorised) targets.
+        net = [] if self.network else ["--network", "none"]
         subprocess.run(
-            ["docker", "run", "-d", "--rm", "--name", self.name,
+            ["docker", "run", "-d", "--rm", "--name", self.name, *net,
              "-v", f"{self.workdir}:/work", "-w", "/work",
              self.image, "sleep", "infinity"],
             check=True, capture_output=True,
@@ -91,6 +95,8 @@ class DockerSandbox(_Base):
         return False
 
 
-def make_sandbox(workdir, backend: str | None = None, **kw) -> _Base:
+def make_sandbox(workdir, backend: str | None = None, network: bool = False, **kw) -> _Base:
     backend = backend or os.environ.get("CTF_SANDBOX", "docker")
-    return (LocalSandbox if backend == "local" else DockerSandbox)(workdir, **kw)
+    if backend == "local":
+        return LocalSandbox(workdir, **kw)          # local has host network anyway
+    return DockerSandbox(workdir, network=network, **kw)

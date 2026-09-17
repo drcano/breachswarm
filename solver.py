@@ -81,7 +81,10 @@ def _block_text(block) -> str | None:
 
 
 async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
-    with make_sandbox(ch.workdir) as sb:
+    # Network only for categories that need a live (authorised) target; untrusted
+    # binaries (pwn/rev/forensics) run air-gapped so they can't call home.
+    needs_net = route(ch.category) in ("web", "osint")
+    with make_sandbox(ch.workdir, network=needs_net) as sb:
         # Recon first: deterministic probes sharpen routing and brief the specialist.
         # Its commands land in sb.actions, so they show up in the audit trail.
         brief = recon(sb, ch.prompt)
