@@ -28,14 +28,17 @@ def main() -> None:
     for t in tasks:
         tid = t["task_id"]
         d = out / str(tid)
-        d.mkdir(exist_ok=True)
-        # copy task files, skipping the solution dir (answer leak)
+        # Task files go in files/ (the ONLY thing the agent sees). challenge.json
+        # holds the gold flag and stays in the parent, out of the sandbox, so the
+        # solver can't read the answer.
+        fdir = d / "files"
+        fdir.mkdir(parents=True, exist_ok=True)
         assets = src / "task_assets" / str(tid)
         if assets.is_dir():
             for item in assets.iterdir():
-                if item.name == "solution":
+                if item.name == "solution":       # answer walkthrough — never expose
                     continue
-                dst = d / item.name
+                dst = fdir / item.name
                 if item.is_dir():
                     shutil.copytree(item, dst, dirs_exist_ok=True)
                 else:

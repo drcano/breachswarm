@@ -38,12 +38,25 @@ async def generate(name: str, prompt: str, trace: list[dict],
         f"Solver trace (chronological):\n\n{_render(trace)}"
     )
     md = []
-    async for msg in query(prompt=task,
-                           options=ClaudeAgentOptions(system_prompt=_SYS, max_turns=1)):
-        for block in getattr(msg, "content", []) or []:
-            if text := getattr(block, "text", None):
-                md.append(text)
-    return "\n".join(md)
+    try:
+        async for msg in query(prompt=task,
+                               options=ClaudeAgentOptions(system_prompt=_SYS, max_turns=3)):
+            for block in getattr(msg, "content", []) or []:
+                if text := getattr(block, "text", None):
+                    md.append(text)
+    except Exception as e:  # writeup is a nicety — never let it fail a solve
+        return _fallback(name, prompt, trace, solved, flag, e)
+    return "\n".join(md) or _fallback(name, prompt, trace, solved, flag, None)
+
+
+def _fallback(name, prompt, trace, solved, flag, err) -> str:
+    """Deterministic writeup straight from the trace when the LLM call fails."""
+    lines = [f"# {name}", f"Status: {'SOLVED' if solved else 'unsolved'}"
+             + (f" — {flag}" if flag else ""), "", f"## Description\n{prompt}", "",
+             "## Trace", "```", _render(trace), "```"]
+    if err:
+        lines += ["", f"_(LLM writeup unavailable: {err})_"]
+    return "\n".join(lines)
 
 
 def save_audit(path, trace: list[dict]) -> None:

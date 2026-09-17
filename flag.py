@@ -18,13 +18,23 @@ def find_flag(text: str, pattern: str | None = None) -> str | None:
 
 
 def is_correct(candidate: str | None, real_flag: str | None) -> bool:
-    """Score a candidate. If the benchmark gives the real flag, compare exactly;
-    otherwise a well-formed match is treated as a solve (live-CTF mode)."""
+    """Strict scoring — what picoCTF's checker actually does (case-sensitive,
+    exact). If no real flag is given, a well-formed match is a solve (live mode)."""
     if not candidate:
         return False
     if real_flag:
         return candidate.strip() == real_flag.strip()
     return True
+
+
+def is_near_miss(candidate: str | None, real_flag: str | None) -> bool:
+    """True when the solver cracked it but got the case wrong (classical ciphers
+    output uppercase; picoCTF gold is lowercase). Diagnostic, not a solve:
+    separates 'couldn't solve' from 'solved, fumbled the format'."""
+    if not candidate or not real_flag:
+        return False
+    c, r = candidate.strip(), real_flag.strip()
+    return c != r and c.lower() == r.lower()
 
 
 def demo() -> None:
@@ -36,6 +46,10 @@ def demo() -> None:
     assert is_correct("flag{x}", "flag{y}") is False
     assert is_correct("flag{x}", None) is True          # live mode: shape is enough
     assert is_correct(None, None) is False
+    # near-miss: cracked but mis-formatted
+    assert is_near_miss("PICOCTF{THENUMBERSMASON}", "picoCTF{thenumbersmason}") is True
+    assert is_near_miss("flag{x}", "flag{x}") is False   # strict solve, not a near-miss
+    assert is_near_miss("picoCTF{wrong}", "picoCTF{right}") is False
     print("flag.py ok")
 
 

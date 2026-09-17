@@ -1,8 +1,13 @@
 __pycache__/
 *.pyc
-# solver outputs (regenerated per run)
+.venv/
+# solver outputs
 results.jsonl
+results.crypto.jsonl
+results.misc.jsonl
 challenges/
 **/audit.jsonl
 **/writeup.md
+build.log
+build.lean.log
 .env

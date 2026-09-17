@@ -14,17 +14,22 @@ from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
-from solver import Challenge, solve
+from solver import Challenge, Result, solve
 from specialists import route
 
 
 def load(dir_: Path) -> Challenge:
     meta = json.loads((dir_ / "challenge.json").read_text())
+    # Agent sees files/ only (if present); metadata + outputs live in the parent,
+    # so the gold flag in challenge.json is never in the sandbox.
+    files = dir_ / "files"
+    workdir = files if files.is_dir() else dir_
     return Challenge(
         name=meta.get("name", dir_.name),
         category=meta.get("category"),
         prompt=meta.get("prompt") or meta.get("description", ""),
-        workdir=str(dir_.resolve()),
+        workdir=str(workdir.resolve()),
+        outdir=str(dir_.resolve()),
         flag_pattern=meta.get("flag_pattern"),
         real_flag=meta.get("flag"),
     )
@@ -39,6 +44,8 @@ async def main() -> None:
                     "(crypto/rev/pwn/web/forensics/misc)")
     ap.add_argument("--per-category", type=int, help="cap challenges per specialist "
                     "(representative sampling across categories)")
+    ap.add_argument("--max-turns", type=int, default=40,
+                    help="cap agent turns per challenge (cost control)")
     args = ap.parse_args()
 
     dirs = [p for p in sorted(Path(args.root).iterdir())
@@ -59,20 +66,38 @@ async def main() -> None:
     results = []
     with open(args.out, "w") as f:
         for d in dirs:
-            r = await solve(load(d))
+            ch = load(d)
+            try:
+                r = await solve(ch, max_turns=args.max_turns)
+            except Exception as e:  # one bad challenge must not kill the batch
+                r = Result(ch.name, route(ch.category), False, False, None, 0, None)
+                print(f"[ERROR ] {ch.name}: {type(e).__name__}: {str(e)[:120]}")
             results.append(r)
             f.write(json.dumps(asdict(r)) + "\n")
             f.flush()  # crash-safe: keep partial results
             cost = f" ${r.cost_usd:.3f}" if r.cost_usd else ""
-            print(f"[{'SOLVED' if r.solved else 'fail  '}] {r.name} "
+            tag = "SOLVED" if r.solved else ("NEAR  " if r.near_miss else "fail  ")
+            print(f"[{tag}] {r.name} "
                   f"({r.specialist}, {r.turns} turns{cost}) {r.flag or ''}")
 
     n = len(results)
     solved = sum(r.solved for r in results)
-    print(f"\n{solved}/{n} solved ({solved / n:.0%})" if n else "no challenges found")
-    by_cat = Counter(r.specialist for r in results if r.solved)
-    for cat, c in by_cat.most_common():
-        print(f"  {cat}: {c}")
+    near = sum(r.near_miss for r in results)
+    if not n:
+        print("no challenges found"); return
+    print(f"\n{solved}/{n} solved strict ({solved / n:.0%}); "
+          f"+{near} near-miss (cracked, mis-formatted) = {solved + near}/{n} "
+          f"({(solved + near) / n:.0%}) effective")
+    by_cat = Counter()
+    for r in results:
+        by_cat[r.specialist]  # ensure key
+        if r.solved:
+            by_cat[r.specialist] += 1
+    for cat in sorted(by_cat):
+        tot = sum(1 for r in results if r.specialist == cat)
+        s = sum(1 for r in results if r.specialist == cat and r.solved)
+        nm = sum(1 for r in results if r.specialist == cat and r.near_miss)
+        print(f"  {cat}: {s}/{tot} strict (+{nm} near)")
 
 
 if __name__ == "__main__":

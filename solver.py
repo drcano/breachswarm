@@ -24,7 +24,7 @@ from claude_agent_sdk import (
     AssistantMessage, TextBlock, ToolResultBlock, ResultMessage,
 )
 
-from flag import find_flag, is_correct
+from flag import find_flag, is_correct, is_near_miss
 from recon import recon, brief_text
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
@@ -36,7 +36,8 @@ class Challenge:
     name: str
     category: str | None
     prompt: str            # the challenge description shown to solvers
-    workdir: str           # host dir with the challenge files, mounted at /work
+    workdir: str           # dir with ONLY the task files, exposed to the agent
+    outdir: str = ""       # where to write audit/writeup (outside the sandbox); defaults to workdir
     flag_pattern: str | None = None
     real_flag: str | None = None   # set by the benchmark for scoring; None in live CTF
 
@@ -46,6 +47,7 @@ class Result:
     name: str
     specialist: str
     solved: bool
+    near_miss: bool
     flag: str | None
     turns: int
     cost_usd: float | None = None
@@ -118,10 +120,11 @@ async def solve(ch: Challenge, max_turns: int = 40) -> Result:
             trace.append({"t": time.time(), "kind": "flag", "text": found})
 
     solved = is_correct(found, ch.real_flag)
-    out = Path(ch.workdir)
+    near = is_near_miss(found, ch.real_flag)
+    out = Path(ch.outdir or ch.workdir)
     audit_path = out / "audit.jsonl"
     writeup_path = out / "writeup.md"
     save_audit(audit_path, trace)
     writeup_path.write_text(await generate(ch.name, ch.prompt, trace, solved, found))
-    return Result(ch.name, spec, solved, found, turns, cost,
+    return Result(ch.name, spec, solved, near, found, turns, cost,
                   str(writeup_path), str(audit_path))
