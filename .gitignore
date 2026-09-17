@@ -12,3 +12,5 @@ build.log
 build.lean.log
 run.*.log
 .env
+run_docker_batches.sh
+run.docker.log

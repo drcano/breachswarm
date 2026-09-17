@@ -4,6 +4,10 @@ Multi-agent CTF solver on the Claude Agent SDK. Orchestrator routes a challenge
 to a category specialist, which drives tools inside a per-challenge Docker
 sandbox; a flag-shaped output auto-terminates the loop.
 
+**Results:** 36/47 (77%) on InterCode-CTF across crypto/general/forensics/rev.
+See **[REPORT.md](REPORT.md)** for the findings report, `docs/how-it-works.html`
+for the visual walkthrough, and [STATUS.md](STATUS.md) for the build log.
+
 ```
 challenge.json ─▶ route() ─▶ specialist (system prompt + sandbox_bash tool)
                                    │  runs bash in Docker sandbox (/work)

@@ -8,11 +8,16 @@ The multi-agent CTF solver works end-to-end and produced a **real, uncontaminate
 number** on the InterCode-CTF benchmark, on the two categories runnable without
 the Docker toolset (crypto = full 19-challenge category; general = 8 sampled):
 
+> Final numbers now span 4 categories — see **[REPORT.md](REPORT.md)** for the
+> polished findings report and **`docs/how-it-works.html`** for the visual doc.
+
 | Category | Strict solve | Effective (incl. near-miss) |
 |---|---|---|
 | Crypto (full category) | 13/19 (68%) | 14/19 (74%) |
 | General Skills (8 sampled) | 8/8 (100%) | 8/8 (100%) |
-| **Total** | **21/27 (78%)** | **22/27 (81%)** |
+| Forensics (10 sampled) | 9/10 (90%) | 9/10 (90%) |
+| Reversing (10 sampled) | 6/10 (60%) | 6/10 (60%) |
+| **Total** | **36/47 (77%)** | **37/47 (79%)** |
 
 **Measured improvement in one iteration:** crypto went **9/19 → 13/19** after
 fixing a real bug — the auto-terminator was firing on encoded flag look-alikes

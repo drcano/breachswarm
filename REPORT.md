@@ -1,0 +1,118 @@
+# CTF Agent — Findings Report
+
+A multi-agent system that autonomously solves capture-the-flag (CTF) challenges,
+built on the Claude Agent SDK and benchmarked on InterCode-CTF. This report covers
+what was built, how it was measured, the results, and what was learned.
+
+Repo: `github.com/drcano/ctf-agent` · Companion visual doc: `docs/how-it-works.html`
+
+---
+
+## 1. What it is
+
+An orchestrator routes a challenge to one of six category specialists (crypto,
+reversing, pwn, web, forensics, misc/general). A deterministic **recon** pass runs
+first to gather facts and sharpen routing; each specialist drives real security
+tools inside an isolated **sandbox**; a deterministic **verifier** stops the loop
+the instant a correctly-formatted flag appears. Every run produces a timestamped
+**audit log** and an LLM-written **writeup**.
+
+The design is deliberately not "one big agent." It follows a finding from the CTF-agent
+literature (EnIGMA, D-CIPHER): the *tool interface* and clean measurement matter more
+than orchestration cleverness. So the build invests in scoped tools, per-challenge
+isolation, and honest scoring.
+
+## 2. Methodology
+
+- **Benchmark:** InterCode-CTF — 100 picoCTF-derived tasks with ground-truth flags,
+  spanning all six categories.
+- **Scoring:** *strict* = exact match to the gold flag (the same check picoCTF runs).
+  A separate *near-miss* column marks challenges the solver cracked but mis-formatted
+  (e.g. classical ciphers output uppercase; gold is lowercase). Near-misses are
+  **never** counted as solves.
+- **Auto-termination:** the verifier regex-matches the flag format on every command's
+  output and stops immediately — the main cost control.
+- **Sandboxes:** two backends. *Docker* = one Kali container per challenge (real
+  isolation; Rosetta runs x86-64 on the M1). *local* = host shell (no isolation;
+  trusted crypto/general only, used when a container isn't available).
+
+### A leak we caught and fixed
+
+The very first batch scored a suspicious 11/11. Cause: the `challenge.json` metadata
+file — which contains the gold flag — was sitting in the agent's working directory,
+and the recon `strings` pass was reading the answer straight out of it. Every "solve"
+was contaminated.
+
+Fixed by restructuring every challenge so the agent sees only a `files/` subdir;
+metadata and gold live in the parent, outside the sandbox. All numbers below are the
+uncontaminated, post-fix results. (This is the difference between a credible benchmark
+and a worthless one.)
+
+## 3. Results
+
+| Category | Strict | Effective (incl. near-miss) |
+|---|---|---|
+| Crypto (full 19-task category) | **13/19 (68%)** | 14/19 (74%) |
+| General Skills (8 sampled) | **8/8 (100%)** | 8/8 (100%) |
+| Forensics (10 sampled) | **9/10 (90%)** | 9/10 (90%) |
+| Reversing (10 sampled) | **6/10 (60%)** | 6/10 (60%) |
+| **Total** | **36/47 (77%)** | **37/47 (79%)** |
+
+Crypto is the full category; the other three are samples. Forensics was the
+strongest category (pcap analysis, LSB steg, metadata, `grep`); reversing solved
+static-analysis and simple-logic challenges and missed a few on multi-line output
+parsing and one runtime error.
+
+Real solves include small-N RSA, large-e RSA, triple-RSA, X.509 certificate parsing,
+Caesar/ROT, Vigenère, and transposition ciphers; plus base conversions, `strings`,
+`grep`, and disassembly teasers in general skills. For context, published agents score
+~22% on the harder NYU-CTF / Cybench sets; InterCode (picoCTF) is easier, so these are
+a sane baseline to iterate from.
+
+### Measured improvement in one iteration: crypto 9/19 → 13/19
+
+The auto-terminator was firing on encoded flag look-alikes: a ROT13-encoded
+`cvpbPGS{...}` matched the loose default flag regex, so the solver stopped *before*
+decoding it. Three crypto tasks failed this exact way. Pinning the flag pattern to
+`picoCTF{...}` fixed it — verified +4 strict solves. Find the failure mode, fix it,
+re-measure the gain.
+
+## 4. Failure analysis
+
+- **Placeholder flags** — the agent sometimes emits `picoCTF{...}` (literal) or an
+  example flag instead of a real result; should be treated as "gave up," and a
+  stricter flag check can reject obvious placeholders.
+- **Multi-line parsing** — a base64 flag split across lines was mis-stitched; a
+  robustness gap in output handling, not reasoning.
+- **Case near-miss** — cracked but wrong case. Content case is genuinely unknowable to
+  the solver, so it is reported honestly rather than gamed.
+- **(fixed) ROT13-not-decoded** — see the improvement above.
+
+## 5. Infrastructure notes
+
+- **Runtime:** Colima on Apple Silicon (M1) with `--vm-type vz --vz-rosetta` so x86-64
+  binaries run. Docker must use the `overlay2` storage driver, **not** the containerd
+  snapshotter — Docker 29's containerd/overlayfs on Colima throws
+  `UtimesNanoAt: input/output error` and corrupts builds. Set
+  `{"features":{"containerd-snapshotter":false}}` in the VM's `daemon.json`.
+- **Images:** `Dockerfile.lean` (crypto/forensics/rev, ~2.6GB, fast) and
+  `Dockerfile.agent` (full toolset). SageMath has no Kali apt package (deferred);
+  pwntools→unicorn needs cmake (deferred to the full image).
+- **Disk:** the full-toolset builds are large; a constrained disk was the main
+  practical blocker during development.
+
+## 6. What's built vs. deferred
+
+**Working:** orchestrator, recon, verifier, both sandboxes, audit + writeup, crash-safe
+batch runner, near-miss scoring, InterCode importer, crypto/forensics/rev tools.
+
+**Deferred by design (add when a batch shows the need):** stateful MCP tools —
+GhidraMCP (rev), pwndbg-mcp (pwn), Playwright (web); the full image's heavy tools;
+LLM-based category fallback and an LLM critic in the verifier.
+
+## 7. Next steps
+
+1. Fix the placeholder-flag acceptance (stricter `find_flag`).
+2. Wire GhidraMCP + Playwright for the rev/web categories, then re-measure.
+3. Scale beyond samples to the full 100-task benchmark for a firm headline number.
+4. Publish the auto-generated writeups as a public portfolio artifact.
