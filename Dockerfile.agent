@@ -7,16 +7,18 @@ FROM kalilinux/kali-rolling
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev pipx git curl wget jq \
-    build-essential ruby ruby-dev golang cargo \
-    # headers for gmpy2/psutil/pwntools native builds
+    build-essential cmake pkg-config ruby ruby-dev golang cargo \
+    # headers for gmpy2/psutil/pwntools/unicorn native builds
     libgmp-dev libmpfr-dev libmpc-dev libssl-dev libffi-dev \
     # rev/pwn
-    gdb binutils file ltrace strace \
+    gdb binutils file ltrace strace radare2 \
     # forensics
-    exiftool steghide foremost p7zip-full poppler-utils tshark \
-    # crypto/pw cracking
-    hashcat john \
+    exiftool binwalk foremost p7zip-full poppler-utils tshark \
+    # crypto/pw cracking + wordlist
+    hashcat john fcrackzip pdfcrack wordlists \
     && rm -rf /var/lib/apt/lists/*
+RUN gunzip -kf /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || true
+ENV WORDLIST=/usr/share/wordlists/rockyou.txt
 # ponytail: SageMath deferred — no reliable Kali apt package, and it's ~2GB.
 # sympy+pycryptodome+z3 cover most crypto; add via the sagemath/sagemath image
 # (or conda) only when a lattice/DLog challenge actually needs it.
@@ -28,24 +30,28 @@ RUN git clone --depth 1 https://github.com/RsaCtfTool/RsaCtfTool /opt/RsaCtfTool
     && pip3 install --break-system-packages -r /opt/RsaCtfTool/requirements.txt
 
 # --- rev / pwn ---
-RUN pip3 install --break-system-packages pwntools angr ROPgadget ropper r2pipe
-RUN gem install one_gadget
+# core pwn (must succeed); ROPgadget/ropper best-effort — their dep filebytes
+# uses ast.Str, removed in py3.12+ (Kali py3.13). pwntools' own ROP() + one_gadget
+# cover ROP-chaining without them.
+RUN pip3 install --break-system-packages pwntools angr r2pipe
+RUN pip3 install --break-system-packages ROPgadget ropper || echo "ropgadget/ropper skipped (py3.13 filebytes incompat)"
+RUN gem install one_gadget || true
 # pwndbg for interactive GDB (also exposed via pwndbg-mcp on the host side)
 RUN git clone --depth 1 https://github.com/pwndbg/pwndbg /opt/pwndbg \
     && cd /opt/pwndbg && ./setup.sh || true
 
-# --- web ---
-RUN pip3 install --break-system-packages httpx requests sqlmap arjun
-RUN go install github.com/ffuf/ffuf/v2@latest \
-    && go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-RUN git clone --depth 1 https://github.com/ticarpi/jwt_tool /opt/jwt_tool \
-    && git clone --depth 1 https://github.com/vladko312/SSTImap /opt/SSTImap
-RUN pip3 install --break-system-packages playwright && playwright install --with-deps chromium
+# --- web --- (each tool best-effort so one failure doesn't sink the image)
+RUN pip3 install --break-system-packages httpx requests sqlmap arjun || true
+RUN go install github.com/ffuf/ffuf/v2@latest || true
+RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest || true
+RUN git clone --depth 1 https://github.com/ticarpi/jwt_tool /opt/jwt_tool || true; \
+    git clone --depth 1 https://github.com/vladko312/SSTImap /opt/SSTImap || true
+RUN pip3 install --break-system-packages playwright && playwright install --with-deps chromium || \
+    echo "playwright skipped"
 
-# --- forensics ---
-RUN pip3 install --break-system-packages volatility3 yara-python pefile oletools
-RUN cargo install binwalk --root /usr/local          # binwalk v3 (Rust)
-RUN gem install zsteg
+# --- forensics --- (binwalk already installed via apt; skip slow cargo build)
+RUN pip3 install --break-system-packages volatility3 yara-python pefile oletools || true
+RUN gem install zsteg || true
 # stegseek: grab release .deb
 RUN wget -q https://github.com/RickdeJager/stegseek/releases/latest/download/stegseek_0.6-1.deb \
     -O /tmp/stegseek.deb && apt-get install -y /tmp/stegseek.deb || true
