@@ -5,22 +5,40 @@ Morning summary of what got built, what the numbers are, and what's blocked.
 ## TL;DR
 
 The multi-agent CTF solver works end-to-end and produced a **real, uncontaminated
-first number** on the InterCode-CTF benchmark, on the two categories runnable
-without the Docker toolset:
+number** on the InterCode-CTF benchmark, on the two categories runnable without
+the Docker toolset (crypto = full 19-challenge category; general = 8 sampled):
 
 | Category | Strict solve | Effective (incl. near-miss) |
 |---|---|---|
-| Crypto | 5/8 (62%) | 8/8 (100%) |
-| General Skills | 8/8 (100%) | 8/8 (100%) |
-| **Total** | **13/16 (81%)** | **16/16 (100%)** |
+| Crypto (full category) | 9/19 (47%) | 11/19 (58%) |
+| General Skills (8 sampled) | 8/8 (100%) | 8/8 (100%) |
+| **Total** | **17/27 (63%)** | **19/27 (70%)** |
 
-Avg 3.8 turns/solve. Real solves included small-N RSA, large-e RSA, X.509 cert
-parsing, Caesar, Vigenère, and Morse. Every run left an `audit.jsonl` + a
-`writeup.md`.
+Real solves included small-N RSA, large-e RSA, triple-RSA, X.509 cert parsing,
+Caesar/ROT, Vigenère, and transposition. Every run left an `audit.jsonl` +
+`writeup.md`. For context, published agents score ~22% on the harder NYU-CTF /
+Cybench sets; InterCode (picoCTF) is easier, so ~47% on a full crypto category is
+a sane, honest baseline to iterate from.
 
-"Near-miss" = the solver cracked the cipher but got the flag case wrong
-(classical ciphers output UPPERCASE; picoCTF gold is lowercase). Tracked
-separately and honestly — it's a real, fixable formatting gap, not a solve.
+"Near-miss" = solver cracked it but got the flag case wrong (classical ciphers
+output UPPERCASE; picoCTF gold is often lowercase). Tracked separately, not
+counted as a solve.
+
+## Failure analysis (the useful part)
+
+Crypto misses cluster into clear, fixable modes — exactly what to attack next:
+- **ROT13 reported un-decoded** (tasks 5, 90, 96): the agent recognized ROT13 but
+  printed the *ciphertext* `cvpbPGS{...}` instead of applying the rotation. Same
+  bug three times → a targeted prompt/tool fix.
+- **Uncracked hashes** (73, 86-adjacent): needs hashcat/john + wordlist, which the
+  local backend lacks — will improve on the Docker image.
+- **Placeholder flags** (74, 95, 57): agent emitted `picoCTF{...}` / example text
+  instead of a real result — should count as "gave up," and a stricter
+  find_flag could reject obvious placeholders.
+- **Case-only near-miss** (55, 56): cracked, wrong case (see above).
+
+General Skills went 8/8 (base conversions, strings, grep, netcat-style, disasm
+teaser) — the agent is strong on straightforward tool-use tasks.
 
 ## Important bug I caught and fixed
 
@@ -78,10 +96,13 @@ and run `python run.py challenges/intercode --per-category 5 --max-turns 25`.
 
 ## Suggested next steps (in order)
 
-1. Free disk, build `Dockerfile.lean`, run forensics + rev on the Docker backend.
-2. Scale the crypto/general run to the full set for a firmer number.
-3. Fix the case-formatting near-miss (small prompt tweak) — turns 3 near-misses
-   into strict solves.
-4. Then expand the image (Ghidra/pwntools/Playwright) for rev/pwn/web.
+1. **Free disk** (~10–20G), build `Dockerfile.lean`, run forensics + rev on the
+   Docker backend — the two categories most gated on the toolset.
+2. Fix the **ROT13-not-applied** failure mode — highest-value crypto fix (3 tasks).
+3. Run the full general-skills set (33) for a firmer number there.
+4. Expand the image (Ghidra/pwntools/Playwright) for rev/pwn/web.
+5. Case near-miss is left as-is: content case is genuinely unknowable to the
+   solver and chasing it is benchmark-gaming; the near-miss column reports it.
 
-Raw results: `results.local.jsonl`. Per-challenge writeups: `challenges/intercode/<id>/writeup.md`.
+Raw results: `results.local.jsonl` (27 challenges). Per-challenge writeups:
+`challenges/intercode/<id>/writeup.md`.
