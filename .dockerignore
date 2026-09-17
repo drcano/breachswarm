@@ -1,0 +1,8 @@
+.venv/
+.git/
+challenges/
+examples/**/audit.jsonl
+examples/**/writeup.md
+__pycache__/
+*.pyc
+build.log

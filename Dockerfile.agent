@@ -11,10 +11,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # rev/pwn
     gdb binutils file ltrace strace \
     # forensics
-    exiftool steghide foremost p7zip-full poppler-utils tshark sagemath \
+    exiftool steghide foremost p7zip-full poppler-utils tshark \
     # crypto/pw cracking
     hashcat john \
     && rm -rf /var/lib/apt/lists/*
+# ponytail: SageMath deferred — no reliable Kali apt package, and it's ~2GB.
+# sympy+pycryptodome+z3 cover most crypto; add via the sagemath/sagemath image
+# (or conda) only when a lattice/DLog challenge actually needs it.
 
 # --- crypto ---
 RUN pip3 install --break-system-packages \
@@ -24,7 +27,7 @@ RUN git clone --depth 1 https://github.com/RsaCtfTool/RsaCtfTool /opt/RsaCtfTool
 
 # --- rev / pwn ---
 RUN pip3 install --break-system-packages pwntools angr ROPgadget ropper r2pipe
-RUN gem install one_gadget && cargo install --root /usr/local ripgrep >/dev/null 2>&1 || true
+RUN gem install one_gadget
 # pwndbg for interactive GDB (also exposed via pwndbg-mcp on the host side)
 RUN git clone --depth 1 https://github.com/pwndbg/pwndbg /opt/pwndbg \
     && cd /opt/pwndbg && ./setup.sh || true

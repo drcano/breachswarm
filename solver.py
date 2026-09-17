@@ -25,6 +25,7 @@ from claude_agent_sdk import (
 )
 
 from flag import find_flag, is_correct
+from recon import recon, brief_text
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
 from writeup import generate, save_audit
@@ -78,15 +79,18 @@ def _block_text(block) -> str | None:
 
 
 async def solve(ch: Challenge, max_turns: int = 40) -> Result:
-    spec = route(ch.category)
     with make_sandbox(ch.workdir) as sb:
+        # Recon first: deterministic probes sharpen routing and brief the specialist.
+        # Its commands land in sb.actions, so they show up in the audit trail.
+        brief = recon(sb, ch.prompt)
+        spec = route(ch.category or brief["suggested"])
         options = ClaudeAgentOptions(
             system_prompt=SPECIALISTS[spec],
             mcp_servers={"ctf": _sandbox_server(sb)},
             allowed_tools=["mcp__ctf__sandbox_bash"],
             max_turns=max_turns,
         )
-        task = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n"
+        task = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"
                 "The challenge files are in your current working directory. Find the flag.")
 
         found, turns, cost, thoughts = None, 0, None, []
