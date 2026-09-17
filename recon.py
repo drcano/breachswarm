@@ -45,7 +45,25 @@ def recon(sb, prompt: str = "") -> dict:
         "target_url": target.group(0) if target else None,
         "suggested": suggested,
         "sample": sample.strip()[:2000],
+        "probe": _deep_probe(sb, suggested).strip()[:2500],
     }
+
+
+# Category-aware deterministic probes — cheap intel that primes the specialist.
+# All tool-guarded (2>/dev/null / `|| true`) so a missing tool never errors.
+_PROBES = {
+    "rev": r"""for f in *; do [ -f "$f" ] || continue; if file "$f" | grep -qE 'ELF|PE32|Mach-O'; then echo "== $f =="; (checksec --file="$f" 2>/dev/null || pwn checksec "$f" 2>/dev/null) | head -8; readelf -h "$f" 2>/dev/null | grep -E 'Class|Machine|Type:'; fi; done""",
+    "pwn": r"""for f in *; do [ -f "$f" ] || continue; if file "$f" | grep -qE 'ELF'; then echo "== $f =="; (checksec --file="$f" 2>/dev/null || pwn checksec "$f" 2>/dev/null) | head -8; fi; done""",
+    "forensics": r"""for f in *; do [ -f "$f" ] || continue; case "$f" in *.pcap|*.pcapng) echo "== $f (protocols) =="; tshark -r "$f" -q -z io,phs 2>/dev/null | head -25;; *.png|*.bmp) echo "== $f (zsteg) =="; zsteg -a "$f" 2>/dev/null | head -12;; *.jpg|*.jpeg) echo "== $f (exif) =="; exiftool "$f" 2>/dev/null | grep -iE 'comment|artist|gps|software|xmp' | head;; *.zip|*.7z|*.tar*|*.gz) echo "== $f (contents) =="; 7z l "$f" 2>/dev/null | head -15;; esac; done""",
+    "crypto": r"""for f in *; do [ -f "$f" ] || continue; case "$f" in *.txt|*.pem|*.pub|*.key|*.enc) echo "== $f =="; head -c 400 "$f"; echo;; esac; done; grep -rlE 'BEGIN (RSA|PUBLIC|PRIVATE)' . 2>/dev/null | head""",
+    "web": "",  # target-driven; specialist probes the live host
+    "misc": "",
+}
+
+
+def _deep_probe(sb, suggested: str) -> str:
+    cmd = _PROBES.get(suggested, "")
+    return sb.bash(cmd) if cmd else ""
 
 
 def _classify(prompt: str, ftypes: str, sample: str) -> str:
@@ -76,6 +94,8 @@ def brief_text(r: dict) -> str:
     lines += [f"  - {f['name']}: {f['type']}" for f in r["files"]] or ["  (none detected)"]
     if r["target_url"]:
         lines.append(f"Target URL: {r['target_url']}")
+    if r.get("probe"):
+        lines.append(f"Category probe:\n{r['probe']}")
     if r["sample"]:
         lines.append(f"Notable strings:\n{r['sample']}")
     return "\n".join(lines)
