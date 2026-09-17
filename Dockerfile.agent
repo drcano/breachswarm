@@ -1,0 +1,53 @@
+# CTF-solver agent sandbox. One container = the agent's execution env.
+# Kali base: ~+9.5% solve rate vs Ubuntu for the same model (arXiv 2605.28334).
+# ponytail: single fat image for all categories. Split per-agent images only if
+# cold-start or size actually hurts.
+FROM kalilinux/kali-rolling
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv pipx git curl wget jq \
+    build-essential ruby ruby-dev golang cargo \
+    # rev/pwn
+    gdb binutils file ltrace strace \
+    # forensics
+    exiftool steghide foremost p7zip-full poppler-utils tshark sagemath \
+    # crypto/pw cracking
+    hashcat john \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- crypto ---
+RUN pip3 install --break-system-packages \
+    pycryptodome sympy z3-solver factordb-python xortool
+RUN git clone --depth 1 https://github.com/RsaCtfTool/RsaCtfTool /opt/RsaCtfTool \
+    && pip3 install --break-system-packages -r /opt/RsaCtfTool/requirements.txt
+
+# --- rev / pwn ---
+RUN pip3 install --break-system-packages pwntools angr ROPgadget ropper r2pipe
+RUN gem install one_gadget && cargo install --root /usr/local ripgrep >/dev/null 2>&1 || true
+# pwndbg for interactive GDB (also exposed via pwndbg-mcp on the host side)
+RUN git clone --depth 1 https://github.com/pwndbg/pwndbg /opt/pwndbg \
+    && cd /opt/pwndbg && ./setup.sh || true
+
+# --- web ---
+RUN pip3 install --break-system-packages httpx requests sqlmap arjun
+RUN go install github.com/ffuf/ffuf/v2@latest \
+    && go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+RUN git clone --depth 1 https://github.com/ticarpi/jwt_tool /opt/jwt_tool \
+    && git clone --depth 1 https://github.com/vladko312/SSTImap /opt/SSTImap
+RUN pip3 install --break-system-packages playwright && playwright install --with-deps chromium
+
+# --- forensics ---
+RUN pip3 install --break-system-packages volatility3 yara-python pefile oletools
+RUN cargo install binwalk --root /usr/local          # binwalk v3 (Rust)
+RUN gem install zsteg
+# stegseek: grab release .deb
+RUN wget -q https://github.com/RickdeJager/stegseek/releases/latest/download/stegseek_0.6-1.deb \
+    -O /tmp/stegseek.deb && apt-get install -y /tmp/stegseek.deb || true
+
+# --- osint (challenge-scoped targets ONLY; enforce in agent prompt) ---
+RUN pipx install maigret && pipx install sherlock-project && pipx install theHarvester || \
+    pip3 install --break-system-packages maigret sherlock-project theHarvester
+
+ENV PATH="/root/go/bin:/root/.cargo/bin:${PATH}"
+WORKDIR /work

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+# solver outputs (regenerated per run)
+results.jsonl
+challenges/
+**/audit.jsonl
+**/writeup.md
+.env
