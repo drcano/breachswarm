@@ -7,7 +7,9 @@ _COMMON = (
     "files are in your current working directory (run `ls` first). Work step by "
     "step: inspect, form a hypothesis, test "
     "it, iterate. When you find the flag, print it plainly on its own line. "
-    "Do not ask the user questions — you have no user. Be economical with commands."
+    "Do not ask the user questions — you have no user. Be economical with commands. "
+    "When you print the flag, reproduce its exact canonical format, including the "
+    "exact case of the prefix (e.g. picoCTF{...}, never PICOCTF{...})."
 )
 
 SPECIALISTS: dict[str, str] = {
