@@ -51,6 +51,8 @@ class Result:
     flag: str | None
     turns: int
     cost_usd: float | None = None
+    duration_s: float | None = None       # wall-clock for the whole solve
+    time_to_flag_s: float | None = None    # from start to the flag appearing
     writeup_path: str | None = None
     audit_path: str | None = None
 
@@ -83,6 +85,7 @@ def _block_text(block) -> str | None:
 async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
     # Network only for categories that need a live (authorised) target; untrusted
     # binaries (pwn/rev/forensics) run air-gapped so they can't call home.
+    t0 = time.time()
     needs_net = route(ch.category) in ("web", "osint", "llm")
     with make_sandbox(ch.workdir, network=needs_net) as sb:
         # Recon first: deterministic probes sharpen routing and brief the specialist.
@@ -134,9 +137,11 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
 
         # Merge command log + reasoning into one chronological trace.
         trace = sorted(sb.actions + thoughts, key=lambda e: e["t"])
+        ttf = round(time.time() - t0, 1) if found else None
         if found:
             trace.append({"t": time.time(), "kind": "flag", "text": found})
 
+    duration_s = round(time.time() - t0, 1)
     solved = is_correct(found, ch.real_flag)
     near = is_near_miss(found, ch.real_flag)
     out = Path(ch.outdir or ch.workdir)
@@ -145,4 +150,4 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
     save_audit(audit_path, trace)
     writeup_path.write_text(await generate(ch.name, ch.prompt, trace, solved, found))
     return Result(ch.name, spec, solved, near, found, turns, cost,
-                  str(writeup_path), str(audit_path))
+                  duration_s, ttf, str(writeup_path), str(audit_path))

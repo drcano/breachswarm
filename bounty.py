@@ -118,11 +118,16 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
     save_audit(workdir / "audit.jsonl", trace)
     report = await generate_report(scope.program, target, trace)
     (workdir / "findings.md").write_text(report)
+    # wall-clock speed of the assessment, from the trace timestamps
+    ts = [e["t"] for e in trace if "t" in e]
+    duration_s = round(ts[-1] - ts[0], 1) if len(ts) > 1 else None
     row = {"time": time.time(), "program": scope.program, "target": target,
-           "turns": turns, "cost_usd": cost, "report": str(workdir / "findings.md")}
+           "turns": turns, "cost_usd": cost, "duration_s": duration_s,
+           "report": str(workdir / "findings.md")}
     with open(METRICS, "a") as f:
         f.write(json.dumps(row) + "\n")
-    print(f"[done] {turns} turns; findings -> {workdir/'findings.md'}")
+    dur = f", {duration_s:.0f}s" if duration_s else ""
+    print(f"[done] {turns} turns{dur}; findings -> {workdir/'findings.md'}")
     return row
 
 

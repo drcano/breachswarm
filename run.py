@@ -87,9 +87,10 @@ async def main() -> None:
             f.write(json.dumps(asdict(r)) + "\n")
             f.flush()  # crash-safe: keep partial results
             cost = f" ${r.cost_usd:.3f}" if r.cost_usd else ""
+            dur = f" {r.duration_s:.0f}s" if r.duration_s else ""
             tag = "SOLVED" if r.solved else ("NEAR  " if r.near_miss else "fail  ")
             print(f"[{tag}] {r.name} "
-                  f"({r.specialist}, {r.turns} turns{cost}) {r.flag or ''}")
+                  f"({r.specialist}, {r.turns} turns{dur}{cost}) {r.flag or ''}")
 
     n = len(results)
     solved = sum(r.solved for r in results)
@@ -99,6 +100,11 @@ async def main() -> None:
     print(f"\n{solved}/{n} solved strict ({solved / n:.0%}); "
           f"+{near} near-miss (cracked, mis-formatted) = {solved + near}/{n} "
           f"({(solved + near) / n:.0%}) effective")
+    ttf = sorted(r.time_to_flag_s for r in results if r.solved and r.time_to_flag_s)
+    if ttf:
+        med = ttf[len(ttf) // 2]
+        print(f"time-to-exploit (solved): fastest {ttf[0]:.0f}s · median {med:.0f}s · "
+              f"slowest {ttf[-1]:.0f}s")
     by_cat = Counter()
     for r in results:
         by_cat[r.specialist]  # ensure key
