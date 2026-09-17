@@ -14,3 +14,7 @@ run.*.log
 .env
 run_docker_batches.sh
 run.docker.log
+server.log
+run.all.log
+run.rev.log
+run_all.sh
