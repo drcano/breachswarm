@@ -23,3 +23,5 @@ run_allstar.sh
 build.full.log
 build.lean2.log
 build.full3.log
+llm_bot.log
+run.owasp.log

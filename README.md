@@ -132,7 +132,23 @@ Each run ends with a clean, publishable writeup the agent generated itself.
 
 The same loop applies to authorised bug-bounty targets and security research:
 scoped hosts, an HTTP + browser toolkit, per-category network isolation, and a full
-auditable trail. Next: GhidraMCP for decompilation and a findings-report generator.
+auditable trail.
+
+### OWASP coverage
+
+Run against purpose-built vulnerable targets (`targets/`, reproduce with
+`./owasp_bench.sh`):
+
+- **OWASP Web Top 10 — 7/7 demonstrable categories exploited** autonomously: IDOR,
+  crypto/integrity failure, SQL & command injection, misconfiguration, JWT
+  `alg:none` auth bypass, and SSRF.
+- **OWASP LLM Top 10** — **Excessive Agency (LLM06) exploited** (tool abuse to read
+  arbitrary files); direct prompt-injection (LLM01/02/07) was **defended by the
+  target model**, which returned decoy flags — reported honestly, not forced.
+
+Full matrix + the honest read: [docs/owasp_coverage.md](docs/owasp_coverage.md).
+A dedicated **`llm` specialist** carries the OWASP LLM Top 10 playbook. Next:
+GhidraMCP for decompilation and a multi-finding report generator.
 
 See [REPORT.md](REPORT.md) for the full findings and [STATUS.md](STATUS.md) for the
 build log. `docs/how-it-works.html` is a visual walkthrough.
