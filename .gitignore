@@ -25,3 +25,7 @@ build.lean2.log
 build.full3.log
 llm_bot.log
 run.owasp.log
+bounty_runs/
+bounty_metrics.jsonl
+scope.json
+llm_bot.log

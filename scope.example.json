@@ -1,0 +1,9 @@
+{
+  "program": "EXAMPLE — replace with the real program name",
+  "authorized": false,
+  "in_scope": ["*.example.com", "203.0.113.0/24"],
+  "out_of_scope": ["admin.example.com", "*.internal.example.com"],
+  "rate_limit_rps": 1.0,
+  "allow_metadata_hosts": false,
+  "notes": "Set authorized=true ONLY after confirming the program permits automated testing. List only assets you are permitted to test."
+}
