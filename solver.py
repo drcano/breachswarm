@@ -58,6 +58,8 @@ class Result:
     writeup_path: str | None = None
     audit_path: str | None = None
     error: str | None = None   # set when the run errored (e.g. rate limit); excluded from scoring
+    cost_sdk_usd: float | None = None   # token-based SDK cost (from model_usage), for A/B
+    tokens: dict | None = None
 
 
 # --- Structural dead-end detector -------------------------------------------
@@ -223,6 +225,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
         spec = route(ch.category or brief["suggested"])
 
         found, turns, cost, thoughts = None, 0, None, []
+        usages = []  # raw ResultMessage.model_usage for token-based costing (A/B parity)
 
         # Fast path: recon (ls/file/strings) may have already surfaced the flag
         # (very common in forensics/general). Solve with zero LLM turns.
@@ -255,8 +258,11 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 async for msg in query(prompt=task, options=options):
                     if isinstance(msg, AssistantMessage):
                         turns += 1  # accumulates across attempts
-                    if isinstance(msg, ResultMessage) and msg.total_cost_usd is not None:
-                        cost = (cost or 0) + msg.total_cost_usd  # accumulate; 0.0 is a real value
+                    if isinstance(msg, ResultMessage):
+                        if msg.total_cost_usd is not None:
+                            cost = (cost or 0) + msg.total_cost_usd  # accumulate; 0.0 is real
+                        if msg.model_usage:
+                            usages.append(msg.model_usage)
                     for block in getattr(msg, "content", []) or []:
                         text = _block_text(block)
                         if not text:
@@ -285,5 +291,8 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
     writeup_path = out / "writeup.md"
     save_audit(audit_path, trace)
     writeup_path.write_text(await generate(ch.name, ch.prompt, trace, solved, found))
+    from pricing import summarize
+    usage = summarize(usages)
     return Result(ch.name, spec, solved, near, found, turns, cost,
-                  duration_s, ttf, str(writeup_path), str(audit_path))
+                  duration_s, ttf, str(writeup_path), str(audit_path),
+                  cost_sdk_usd=usage["cost_sdk_usd"], tokens=usage["tokens"])

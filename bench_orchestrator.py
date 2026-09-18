@@ -56,7 +56,8 @@ async def _baseline(name, prompt, flag, wd, max_turns=40) -> dict:
                    flag_pattern=r"flag\{[^}\s]+\}", real_flag=flag)
     r = await solve(ch, max_turns=max_turns, retries=0)
     return {"mode": "baseline", "name": name, "solved": r.solved, "flag": r.flag,
-            "turns": r.turns, "cost_usd": r.cost_usd, "duration_s": r.duration_s}
+            "turns": r.turns, "cost_usd": r.cost_usd, "duration_s": r.duration_s,
+            "cost_sdk_usd": r.cost_sdk_usd, "tokens": r.tokens}
 
 
 async def main():
