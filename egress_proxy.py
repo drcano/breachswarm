@@ -65,13 +65,18 @@ class Proxy(BaseHTTPRequestHandler):
             return self._deny(host, reason)
         _rate_gate()
         try:
-            import urllib.request
+            import urllib.request, urllib.error
             req = urllib.request.Request(self.path, method=self.command,
                                          headers={k: v for k, v in self.headers.items()})
             length = int(self.headers.get("Content-Length", 0))
             if length:
                 req.data = self.rfile.read(length)
-            with urllib.request.urlopen(req, timeout=15) as r:
+            try:
+                r = urllib.request.urlopen(req, timeout=15)
+            except urllib.error.HTTPError as he:
+                r = he  # a non-2xx IS a real response (500 = SQL error signal!) —
+                        # pass it through, don't mistake it for a scope block
+            with r:
                 body = r.read()
                 self.send_response(r.status)
                 self.send_header("Content-Length", str(len(body))); self.end_headers()

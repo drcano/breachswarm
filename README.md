@@ -152,6 +152,11 @@ bounty pipeline (`bounty.py`, scope-gated) produced client-ready reports:
   unauth UNION SQLi credential dump, forged JWT (weak secret `random`), BOLA admin
   password reset, mass-assignment admin, `/_debug` cleartext-password leak.
   → [docs/vampi_findings.md](docs/vampi_findings.md)
+- **testasp.vulnweb.com (LIVE external target)** — first run against a real host on
+  the internet (Acunetix's authorized-for-scanning test site), through the
+  **`--enforce`** no-bypass egress guard at 2 req/s: 5 findings incl. 2 Critical SQLi
+  (auth bypass + DB read) and path traversal, in 26 turns / 101s / $0.99. One finding
+  independently re-verified by hand. → [docs/vulnweb_findings.md](docs/vulnweb_findings.md)
 
 Each finding carries a CVSS 3.1 vector, CWE, affected asset, repro steps, impact,
 and remediation. See [CASE_STUDY.md](CASE_STUDY.md) for the measured economics.
