@@ -155,12 +155,30 @@ Measured on rest.vulnweb.com (one run each, enforced):
 | Wall-clock | 339s | **248s** |
 | Report | structured findings | degraded to a raw trace dump |
 
-Verdict: the mechanism works — the surface map more than halves exploitation turns
-and parallelism cuts wall-clock — but recon subagents cost tokens too, so **total
-turns and cost went UP**, and this run's report step degraded. So it's a
-wall-clock/latency win, not a cost win. **Shipped opt-in, OFF by default**; not
-claimed as an improvement. It would pay off where latency matters more than token
-cost, or with cheaper recon (smaller model per subagent) — untested.
+First read (rest.vulnweb, one run): exploit turns 69->30, wall 339->248s, but total
+turns/cost up. Looked like a latency win. **It wasn't — that was single-run noise.**
+
+Proper A/B (`bench_recon.py`, N=4/arm interleaved, large surface = self-hosted Juice
+Shop, recon on cheap haiku):
+
+| Metric | OFF median | ON median | Δ | perm p |
+|---|---|---|---|---|
+| Total turns | 30.5 | 81.0 | **+50.5** | 0.086 |
+| Cost (token-based) | $2.0 | $2.7 | **+$0.7** | 0.34 |
+| Wall-clock | 131.8s | 178.1s | **+46.3s** | 0.52 |
+
+**Verdict: parallel-recon LOSES on all three metrics, even on the large surface it was
+built for, even after moving recon to a cheap model.** Not significant at N=4, but all
+three point the same way and the turn effect is large. Mechanism (from the token data):
+the pre-built map did NOT reduce exploitation turns (OFF exploit [37,20,24,37] ≈ ON
+[20,22,60,41]) and it *bloated context* — ON cache tokens 0.9-1.6M vs OFF 0.3-0.6M,
+because the big map is re-sent every downstream turn. So it adds 50 recon turns AND
+fattens each exploit turn, for no turn savings.
+
+The "breadth needs parallel subagents" intuition is **disproven by measurement**.
+Kept opt-in and OFF by default purely as the documented negative result; do NOT enable
+it. Real lesson: a single stateful agent with good deterministic recon beats fanning
+out — coordination + context-duplication overhead exceeds any parallelism gain here.
 
 Also surfaced a real bug (fixed): a recon subagent hitting its turn cap made the SDK
 raise `ResultError`, which crashed the whole run through `asyncio.gather`; recon is
