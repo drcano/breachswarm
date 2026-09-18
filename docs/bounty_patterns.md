@@ -111,6 +111,21 @@ turn counts on this target are variance-dominated (observed 20 / 24 / 42 / 50 ac
 single runs), so any turn-cut claim needs multi-run measurement. What is proven: the
 detector fires on the real dead-end pattern and bounds runaway same-dimension probing.
 
+### A/B verdict (bench_detector.py, N=5/arm, interleaved)
+
+Measured it properly. detector **off**: turns [13,21,28,37,40] median 28.0; detector
+**on**: [13,14,25,38,38] median 25.0. Both solved 5/5. Median Δ = **-3 turns**,
+**permutation p = 1.000 — not significant.** Effect size is tiny (Cohen's d ≈ 0.2);
+confirming an effect that small would need ~200 runs/arm, which isn't worth it.
+
+**Conclusion: the dead-end detector does NOT measurably cut turns on this target.**
+It fires on the real dead-end pattern (replay-proven) and does no harm (5/5 solved,
+faintly favorable direction), so it stays in as a harmless safety net — but we do
+**not** claim it as an efficiency win. The honest takeaway: agent turn-efficiency on
+a solvable target is dominated by run-to-run variance, and neither a prompt nudge
+nor an in-band detector moves it meaningfully. Real efficiency gains, if any, likely
+need a different lever (better recon priors, tool design) — measured, not asserted.
+
 ## Next lethality upgrades (candidates)
 
 1. **Multi-run measurement harness** to quantify the detector's turn effect against
