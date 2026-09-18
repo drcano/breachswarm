@@ -1,0 +1,40 @@
+# Knowledge base coverage (RAG corpus)
+
+_Auto-generated. 32 card files -> 34 retrievable chunks. Retrieval is stdlib TF-IDF; see eval_rag.py (recall@1 23/25, recall@3 25/25)._
+
+The agent pulls these ON DEMAND via `search_knowledge`, and recon auto-loads the fingerprint-matched ones (see recon.playbook_text). Grow the corpus by dropping a new `knowledge/*.md` — no code change; run `eval_rag.py` to confirm no regression.
+
+- **Password Cracking: Archives, Docs & Hashes** (`archive_cracking.md`)
+- **Authentication: Password Reset & OAuth Flaws** (`auth_reset_oauth.md`)
+- **Exploit Chains — combining primitives into critical impact** (`chains.md`)
+- **OS Command Injection** (`command_injection.md`)
+- **CORS Misconfiguration** (`cors.md`)
+- **Insecure Deserialization** (`deserialization.md`)
+- **Malicious file upload** (`file_upload.md`)
+- **Forensics: Network Captures (pcap) & Memory** (`forensics_pcap_memory.md`)
+- **Forensics: Files, Images & Stego** (`forensics_stego.md`)
+- **GraphQL Abuse** (`graphql.md`)
+- **Hash Attacks & Classical Crypto** (`hash_and_classical.md`)
+  - Classical / Encoding Ciphers
+- **IDOR / BOLA (broken object-level authorization) — highest-frequency high-sev** (`idor_bola.md`)
+- **JWT attacks** (`jwt.md`)
+- **LFI / Path Traversal / File Read** (`lfi_path_traversal.md`)
+- **Mass assignment / auto-binding privilege escalation** (`mass_assignment.md`)
+- **NoSQL Injection (Mongo/etc.)** (`nosqli.md`)
+- **Open Redirect** (`open_redirect.md`)
+- **Padding Oracle & AES Mode Attacks** (`padding_oracle.md`)
+- **Prototype Pollution (JS/Node)** (`prototype_pollution.md`)
+- **Pwn: Format String & Heap (brief)** (`pwn_format_string.md`)
+- **Pwn: Stack Overflow & ROP** (`pwn_rop_stack.md`)
+- **Race Conditions / TOCTOU** (`race_condition.md`)
+- **HTTP Request Smuggling (Desync)** (`request_smuggling.md`)
+- **Reverse Engineering** (`reversing.md`)
+- **RSA Attacks (CTF crypto)** (`rsa_attacks.md`)
+- **SQL Injection** (`sqli.md`)
+- **SSRF — Server-Side Request Forgery** (`ssrf.md`)
+- **SSTI — Server-Side Template Injection -> RCE** (`ssti.md`)
+- **Subdomain Takeover & Cache Poisoning** (`subdomain_takeover.md`)
+  - Web Cache Poisoning & Deception
+- **WAF / filter evasion (use surgically — evasion trials are noisy)** (`waf_evasion.md`)
+- **Cross-Site Scripting (XSS)** (`xss.md`)
+- **XXE — XML External Entity** (`xxe.md`)
