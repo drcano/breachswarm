@@ -102,19 +102,21 @@ chain and delegates each stage to fresh specialist sub-agents on a shared blackb
 |---|---|---|---|---|
 | Gauntlet (5-stage) | baseline | **2/2** | 187s | fastest |
 | | stateful | **2/2** | 164s | ties baseline |
-| | orchestrator | **1/2** | 637s | **fewer solves, 3.4× slower, real $** |
+| | orchestrator | **1/2** | 280s solve / 993s fail | never wins, always costs real $ |
 | Fortress (4-stage) | baseline | 0/2* | 1167s | *validation run solved (~1030s) |
 | | orchestrator | 0/1 | 2817s | most expensive ($6.51/run) |
 
-**The multi-agent orchestrator lost** — it solved *less* reliably and ran 3.4× slower at
-real token cost; a single agent's context already carries chain state fine. Explicit state
-merely tied. **A single well-equipped agent (RAG + recon-playbook) stays the default;** the
+**The multi-agent orchestrator did not win** — it never beat baseline on solve rate and
+always cost real time/$ (its one Gauntlet solve was ~1.5× a baseline solve at $1.70; its
+failures ran 993s–2817s), where a single agent early-exits for ~nothing and already carries
+chain state fine. Explicit state merely tied. (N=2 — the cost/latency gap is robust, the
+solve-rate delta suggestive.) **A single well-equipped agent (RAG + recon-playbook) stays the default;** the
 orchestrator and stateful modes are kept as opt-in, documented experiments. The A/B harness
 also acted as a fuzzer, surfacing **three real correctness bugs** in the solve loop
-(silent-decoy flail, crash-on-budget-exhaustion, false-positive flag match) — each fixed
-with a regression test. And a clean finding: **chain depth ≠ difficulty** — the deeper
-Gauntlet solved in ~3 min while Fortress's WAF-evasion S1 was the real wall, which validates
-the RAG (clean technique→card mapping = fast solves). Full writeup + numbers:
+(silent-decoy flail, crash-on-budget-exhaustion, false-positive flag match) — fixed, with
+regression tests for the two logic bugs. And a clean finding: **chain depth ≠ difficulty** — the deeper
+Gauntlet solved in ~3 min while Fortress's WAF-evasion S1 was the real wall — consistent with
+the RAG carrying real load (a direct ablation to isolate it is the next step). Full writeup + numbers:
 [docs/OVERNIGHT.md](docs/OVERNIGHT.md).
 
 ## Full-stack console

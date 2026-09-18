@@ -63,17 +63,20 @@ turns count streamed AssistantMessages (~2.5× the SDK turn cap), consistent acr
 |---|---|---|---|---|---|
 | **Gauntlet** (5-stage) | baseline | **2/2** | 54 | **187** | fastest; early-exit |
 | | stateful | **2/2** | 41 | 164 | ≈ baseline (within N=2 noise) |
-| | orchestrator | **1/2** | 92 | 637 | **fewer solves, 3.4× wall**, $1.70–2.78/run |
+| | orchestrator | **1/2** | 92 | 637* | *avg mixes a 280s **solve** + a 993s **fail**; $1.70–2.78/run |
 | **Fortress** (4-stage) | baseline | 0/2 | 40 | 1167 | validation run *did* solve (~1030s): solvable, high-variance |
 | | stateful | 0/2 | 102 | 1010 | $2.2–2.9/run |
 | | orchestrator | 0/1 | 134 | 2817 | **2.4× wall, $6.51/run** |
 
 **Findings:**
-- **The orchestrator lost.** On the solvable Gauntlet it solved *less* often (1/2 vs 2/2)
-  AND ran **3.4× slower** at real token cost, while the single agents early-exit for
-  ~nothing. On Fortress it was the most expensive by far and solved nothing. Fresh
-  sub-contexts *re-pay* recon/decoy cost each delegation and hand off lossily — overhead
-  with no upside here.
+- **The orchestrator did not win.** It never beat baseline on solve rate (Gauntlet 1/2 vs
+  2/2 at N=2; Fortress 0/1 vs a baseline that solved in validation) and it always cost real
+  time/$ where the single agents early-exit for ~nothing. Per-outcome (the honest cut, since
+  averaging solve+fail runs is misleading): its one Gauntlet *solve* took 280s ≈ **1.5×** a
+  baseline solve **and** cost $1.70; its failing runs are very expensive (Gauntlet 993s;
+  Fortress 2817s / $6.51). Fresh sub-contexts *re-pay* recon/decoy cost each delegation and
+  hand off lossily — overhead with no upside here. (N=2 is small; the cost/latency gap is the
+  robust result, the solve-rate delta is suggestive.)
 - **Explicit state (stateful) merely tied baseline** (2/2 both on Gauntlet, wall within
   noise). The extra machinery didn't earn its keep either — a single context already
   remembers its own artifacts across a 5-stage chain.
@@ -81,9 +84,11 @@ turns count streamed AssistantMessages (~2.5× the SDK turn cap), consistent acr
   *shallower* Fortress (4 stages) mostly failed — because per-stage **technique** difficulty
   dominates. Gauntlet's stages (IDOR, NoSQLi `$ne`, JWT `alg:none`, decimal-IP SSRF, cmdi)
   map cleanly onto RAG cards and execute directly; Fortress's **S1 WAF-evasion SQLi +
-  `information_schema` enumeration** (335 requests across 3 runs) is the real wall. This
-  **validates the RAG** (clean technique→card mapping = fast solves) and pinpoints where to
-  harden guidance next (WAF-evasion methodology).
+  `information_schema` enumeration** (335 requests across 3 runs) is the real wall. This is
+  **consistent with the RAG carrying real load** (clean technique→card mapping = fast solves)
+  — though not yet *isolated*: recon-playbook and the base model are confounds, so a direct
+  RAG ablation (next-step #2) is what would prove it. It also pinpoints where to harden
+  guidance next (WAF-evasion methodology).
 
 **Verdict (measure-first, kept-only-if-it-wins):** neither the multi-agent orchestrator nor
 the explicit-state layer beat a single well-equipped agent (RAG + recon-playbook). **Baseline
@@ -100,7 +105,8 @@ flag) so the A/B runs against a known-good target.
 
 ## 5. Three real bugs the A/B harness caught (the harness as a fuzzer)
 Running the experiment turned the solve loop into a stress test and surfaced three genuine
-correctness bugs — each fixed with a regression test:
+bugs — the two logic bugs (#1, #3) have regression tests in `test_ctf_agent.py`; #2 is a
+harness-robustness wrap mirroring `run.py`'s existing handling (no unit test):
 
 1. **Silent-decoy flail (correctness).** With the decoy-rejection fix in place, the agent
    found the `/api/debug` honeypot flag, the loop silently refused it, but *nothing told
