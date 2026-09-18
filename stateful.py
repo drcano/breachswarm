@@ -47,7 +47,8 @@ def _state_server(blackboard):
 
 
 async def solve_stateful(name: str, prompt: str, workdir: str,
-                         real_flag: str | None = None, max_turns: int = 40) -> dict:
+                         real_flag: str | None = None, max_turns: int = 40,
+                         flag_pattern: str = r"flag\{[^}\s]+\}") -> dict:
     t0 = time.time()
     blackboard: dict[str, str] = {}
     turns, cost, usages, found = 0, 0.0, [], None
@@ -73,7 +74,7 @@ async def solve_stateful(name: str, prompt: str, workdir: str,
                         usages.append(msg.model_usage)
                 for b in getattr(msg, "content", []) or []:
                     t = _block_text(b)
-                    if t and (hit := find_flag(t)):
+                    if t and (hit := find_flag(t, flag_pattern)):  # strict: avoid args{name}
                         found = hit
                 if found:
                     break

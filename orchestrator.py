@@ -95,6 +95,7 @@ def _orchestrator_servers(sb, blackboard, counters):
             allowed_tools=["mcp__ctf__sandbox_bash", "mcp__kb__search_knowledge"],
             max_turns=counters["spec_max_turns"], model=MODEL)
         out_text, flag = [], None
+        fp = counters.get("flag_pattern")
         try:
             async for msg in query(prompt=task, options=opts):
                 if isinstance(msg, AssistantMessage):
@@ -108,7 +109,7 @@ def _orchestrator_servers(sb, blackboard, counters):
                     t = _block_text(b)
                     if t and isinstance(b, TextBlock):
                         out_text.append(t)
-                        if hit := find_flag(t):
+                        if hit := find_flag(t, fp):
                             flag = hit
         except Exception as e:  # SDK raises on max_turns; salvage partial output
             out_text.append(f"[specialist stopped: {e}]")
@@ -132,13 +133,14 @@ def _orchestrator_servers(sb, blackboard, counters):
 
 async def solve_chain(name: str, prompt: str, workdir: str, real_flag: str | None = None,
                       outdir: str = "", orch_max_turns: int = 16,
-                      spec_max_turns: int = 20) -> dict:
+                      spec_max_turns: int = 20,
+                      flag_pattern: str = r"flag\{[^}\s]+\}") -> dict:
     """Run the orchestrator against a target. Returns a metrics dict comparable to the
     single-agent baseline (solver.solve): solved/turns/cost/duration/artifacts."""
     t0 = time.time()
     blackboard: dict[str, str] = {}
     counters = {"turns": 0, "cost": 0.0, "usages": [], "flag": None,
-                "spec_max_turns": spec_max_turns}
+                "spec_max_turns": spec_max_turns, "flag_pattern": flag_pattern}
     with make_sandbox(workdir, network=True) as sb:
         brief = recon(sb, prompt)
         servers = _orchestrator_servers(sb, blackboard, counters)
@@ -161,7 +163,7 @@ async def solve_chain(name: str, prompt: str, workdir: str, real_flag: str | Non
                         counters["usages"].append(msg.model_usage)
                 for b in getattr(msg, "content", []) or []:
                     t = _block_text(b)
-                    if t and (hit := find_flag(t)):
+                    if t and (hit := find_flag(t, flag_pattern)):
                         found = hit
         except Exception as e:
             print(f"[orchestrator stopped: {e}]")
