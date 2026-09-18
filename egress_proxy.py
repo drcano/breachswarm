@@ -10,6 +10,7 @@ Run: ./.venv/bin/python egress_proxy.py --scope scope.json --port 8888
 from __future__ import annotations
 
 import argparse
+import random
 import select
 import socket
 import threading
@@ -22,11 +23,17 @@ from scope import Scope
 SCOPE: Scope
 _last = [0.0]
 _lock = threading.Lock()
+JITTER = 0.4   # fraction of the base gap added at random (0..JITTER*gap)
 
 
 def _rate_gate():
+    """Enforce the scope rate limit, plus a small random extra wait. Jitter ONLY ever
+    adds delay (never exceeds the stated rate), so it stays good-citizen — it just
+    avoids the perfectly-even request train that itself screams 'bot' to a rate
+    limiter. Not concealment: a monitored target still sees every (evadable) payload."""
     with _lock:
         gap = 1.0 / max(SCOPE.rate_limit_rps, 0.01)
+        gap += random.uniform(0, JITTER * gap)
         wait = _last[0] + gap - time.time()
         if wait > 0:
             time.sleep(wait)

@@ -130,7 +130,14 @@ SPECIALISTS: dict[str, str] = {
         "limit, response tamper, skip-step, remember-device); subdomain takeover "
         "(dangling CNAME to unclaimed S3/Heroku/Zendesk); info disclosure (.env/.git/"
         "source-maps/debug/verbose errors/CORS wildcard/over-exposed API fields).\n"
-        "Also check robots.txt, /flag, /.env, /.git, /metrics, and default creds."
+        "Also check robots.txt, /flag, /.env, /.git, /metrics, and default creds.\n"
+        "# SIGNATURE-LEAN / EVASION-FIRST (authorized WAF-bypass testing — reduce footprint):\n"
+        "17. Send the EVADED form of an injection payload FIRST, not the textbook form: "
+        "inline comments (`UNION/**/SELECT`, `/**/` for spaces), case (`UnIoN`), URL/double-"
+        "encoding, no-space (`$IFS`), and math (`3*2*1=6` not `1=1`). This both tests whether "
+        "the WAF is bypassable (a reportable finding) and keeps your requests off the obvious "
+        "signature. Prefer ONE clean evaded probe over a barrage of raw payloads. If recon "
+        "flags a WAF, call search_knowledge('waf evasion') before probing that sink."
     ),
     "forensics": _COMMON + (
         "\nFORENSICS specialist. Decision tree:\n"

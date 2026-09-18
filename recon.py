@@ -73,7 +73,10 @@ def _web_recon(sb, url: str) -> str:
     cmd = rf"""
 U="{u}"
 echo "== fingerprint (Server / framework / cookies) =="
-curl -sSi -m 8 "$U/" 2>/dev/null | grep -iE '^(server|x-powered-by|x-aspnet|x-generator|via|set-cookie|content-type):' | head -12
+HDR=$(curl -sSi -m 8 "$U/" 2>/dev/null)
+echo "$HDR" | grep -iE '^(server|x-powered-by|x-aspnet|x-generator|via|set-cookie|content-type):' | head -12
+echo "== WAF fingerprint (passive — from headers/cookies, no extra requests) =="
+echo "$HDR" | grep -ioE 'cloudflare|cf-ray|akamaighost|x-akamai|sucuri|x-sucuri|incap_ses|visid_incap|x-iinfo|bigipserver|fortiwaf|barracuda|mod_security|awselb|x-sucuri-id|x-cdn' | sort -u | sed 's/^/  WAF signal: /' | head -6
 echo "== homepage body (endpoints are often listed in text/JSON, not just links) =="
 H=$(curl -s -m 8 "$U/" 2>/dev/null)
 echo "$H" | head -c 600
@@ -127,6 +130,7 @@ _WEB_SIGNALS: list[tuple[str, str]] = [
     (".env", "source disclosure secrets credentials"),
     ("jwt", "jwt forge alg none weak secret"),
     ("mongo", "nosql injection mongodb auth bypass"),
+    ("waf signal", "waf filter evasion bypass inline comment encoding"),
 ]
 # money bugs to seed for ANY web target, so the chain mindset is always primed.
 _WEB_DEFAULT = ["exploit chain escalate primitives to critical",
@@ -211,6 +215,10 @@ def demo() -> None:
     assert "template" in pb and "chain" in pb, f"web playbook missed: {pb[:200]}"
     pwn = {"suggested": "pwn", "probe": "", "sample": ""}
     assert "rop" in playbook_text(pwn).lower(), "pwn playbook missed ROP"
+    # a passive WAF fingerprint auto-loads the evasion playbook
+    wafbrief = {"suggested": "web", "probe": "  WAF signal: cloudflare", "sample": ""}
+    assert any("waf" in q for q in _hint_queries(wafbrief)), "WAF signal didn't trigger evasion query"
+    assert "evasion" in playbook_text(wafbrief).lower(), "WAF playbook missed evasion card"
     assert playbook_text({"suggested": "web"}) != ""
     os.environ["CTF_PLAYBOOK"] = "0"
     assert playbook_text(web) == "", "CTF_PLAYBOOK=0 should disable"
