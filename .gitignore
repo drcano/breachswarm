@@ -31,3 +31,9 @@ scope.json
 llm_bot.log
 scope.test.json
 scope.juice.json
+
+# tracked evidence directory (curated benchmark results)
+!results/
+results/**
+!results/*.jsonl
+!results/*.md

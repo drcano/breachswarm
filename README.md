@@ -142,13 +142,28 @@ Run against purpose-built vulnerable targets (`targets/`, reproduce with
 - **OWASP Web Top 10 — 7/7 demonstrable categories exploited** autonomously: IDOR,
   crypto/integrity failure, SQL & command injection, misconfiguration, JWT
   `alg:none` auth bypass, and SSRF.
-- **OWASP LLM Top 10** — **Excessive Agency (LLM06) exploited** (tool abuse to read
-  arbitrary files); direct prompt-injection (LLM01/02/07) was **defended by the
-  target model**, which returned decoy flags — reported honestly, not forced.
+- **OWASP LLM Top 10** — **Direct prompt injection (LLM01) genuinely exploited**:
+  against an FS-isolated target (couldn't read its own source), a persistent
+  injection extracted the system-prompt secret over HTTP in 39 turns. Excessive
+  Agency (LLM06) — the tool-abuse *technique* is demonstrated, but a clean isolated
+  re-run hits an infra limit (SDK-driven target + SDK-driven attacker → nested
+  session errors), documented as a caveat, not claimed as a win. Indirect
+  injection is topology-limited. **~1.5 of 10 categories are genuinely
+  demonstrated** — scoped honestly rather than claimed wholesale.
 
 Full matrix + the honest read: [docs/owasp_coverage.md](docs/owasp_coverage.md).
 A dedicated **`llm` specialist** carries the OWASP LLM Top 10 playbook. Next:
 GhidraMCP for decompilation and a multi-finding report generator.
 
-See [REPORT.md](REPORT.md) for the full findings and [STATUS.md](STATUS.md) for the
-build log. `docs/how-it-works.html` is a visual walkthrough.
+## Read next
+
+- **[CASE_STUDY.md](CASE_STUDY.md)** — unknown target → client-ready report, with
+  measured unit economics (~$0.60–0.66/finding).
+- **[DEMO.md](DEMO.md)** — 90-second demo storyboard + one-command reproductions.
+- **[docs/GO_LIVE.md](docs/GO_LIVE.md)** — authorization checklist for a real
+  bug-bounty engagement (the system refuses unauthorized targets).
+- **[docs/owasp_coverage.md](docs/owasp_coverage.md)** — full OWASP Web + LLM
+  matrix, honestly scoped.
+- **[results/](results/)** — raw benchmark evidence (JSONL, ground-truth flags).
+- [REPORT.md](REPORT.md) · [STATUS.md](STATUS.md) · `docs/how-it-works.html`
+  (visual walkthrough).
