@@ -144,25 +144,25 @@ before the usage-bearing message, so their cost reads 0). The orchestrator domin
 $6.51 (Fortress) + $1.70 + $2.78 (Gauntlet) + $2.27 (pilot) ≈ **$13 for 4 runs** vs the
 single agents' ~free solves — itself part of the verdict.
 
-## Ranked "do next"
-1. **Harden the measured bottleneck: S1 WAF-evasion recon.** The data pins failures on
-   WAF-evasion SQLi + `information_schema` enumeration. Add a WAF-probe to `_web_recon`
-   (send a blocked payload, detect the 403/"blocked" signature) and force-load the
-   `waf_evasion`+`sqli` cards when a WAF is detected. Highest expected ROI.
-2. ~~Quantify the RAG's contribution (ablation A/B).~~ **DONE — `docs/rag_ablation.md`.**
-   Result: **no measurable RAG lift on Gauntlet** (full ≈ KB-only ≈ no-RAG, all 2/2, within
-   noise) — the base model already knows those techniques. RAG's value, if any, is on
-   rarer/precise payloads; the *next* ablation should target Fortress S1 WAF-evasion.
-3. **Right-size the single-agent budget for deep chains.** Fortress is solvable but
-   high-variance at 40 turns; test 55–60 turns (or better early-stage efficiency) so deep
-   chains solve reliably without the orchestrator's cost.
-4. **Fix cost capture on early-exit solves** so every run has a token-cost number (drain to
-   the final ResultMessage, or accumulate per-message usage) — closes the one measurement
-   gap in this A/B.
-5. **Real-app data runs:** stand up crAPI + DVGA + Pixi (see `docs/targets.md`) to exercise
-   the new API/GraphQL/NoSQL/mass-assignment cards on apps the system has never seen.
-6. **Authorized bounty go-live** when a program that permits automation is in hand
-   (`docs/GO_LIVE.md`), with `--enforce` egress + rate limiting.
+## Ranked "do next" — status after the follow-up session (2026-09-19)
+1. ~~Harden the S1 WAF-evasion bottleneck.~~ **DONE (reactive `_waf_nudge`).** Chose a generic
+   one-shot nudge (fires on any WAF/filter-block response → re-encode + point at the cards)
+   over proactive recon — no need to guess the injectable param. Validated on Fortress N=2:
+   S1 requests dropped **~112→~49/run (~2.3×)**, clean evasion after the nudge. Both runs
+   still failed *at 40 turns* → the remaining blocker is budget (see #3), not S1.
+2. ~~Quantify the RAG (ablation).~~ **DONE — `docs/rag_ablation.md`.** No measurable RAG lift
+   on Gauntlet (full ≈ KB-only ≈ no-RAG, all 2/2). Value (if any) is on rarer payloads; the
+   next ablation should target Fortress S1 WAF-evasion now that the nudge is in.
+3. **Right-size the deep-chain budget (open).** With S1 fixed, Fortress still fails at 40
+   turns — it's the S3 decimal-IP SSRF / S4 SSTI endgame running out of budget. Test 55–60
+   turns; expected to convert Fortress to a reliable solve without the orchestrator's cost.
+4. ~~Fix early-exit cost capture.~~ **DONE.** `solver.solve` now tallies tokens per
+   AssistantMessage (captured even on early-exit solves); `analyze_ab` shows cost `n/a` (not
+   `0.0`) when uncaptured. `CTF_KB=0` added for the ablation.
+5. **Real-app data runs (open).** DVGA image pulled; stand up DVGA/crAPI/Pixi and run the
+   bounty pipeline to exercise the GraphQL/NoSQL/mass-assignment cards on unseen apps.
+6. **Authorized bounty go-live (open, blocked on a permitting program).** `docs/GO_LIVE.md`
+   updated to point at `docs/targets.md`; guardrails (`scope.py`, `--enforce`) verified.
 
 ## What did NOT make the cut (measured & rejected — the honest part)
 - **Multi-agent orchestrator** — fewer solves, 3.4× wall, real cost. Kept opt-in, documented.
