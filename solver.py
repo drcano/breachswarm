@@ -69,6 +69,32 @@ def _sandbox_server(sb):
     return create_sdk_mcp_server(name="ctf", version="0.1", tools=[sandbox_bash])
 
 
+def _decompiler_server(sb):
+    """MCP server exposing a `decompile` tool for rev/pwn specialists.
+
+    Backed by radare2 (already in the image); the *integration* is identical to
+    wiring in an external GhidraMCP — swap the r2 command for a Ghidra
+    analyzeHeadless call and nothing else changes. See docs/mcp_integration.md.
+    """
+    @tool("decompile",
+          "Decompile a binary function to pseudo-C (radare2). Use for reversing "
+          "instead of reading raw disassembly by hand.",
+          {"binary": str, "function": str})
+    async def decompile(args):
+        b = args["binary"].replace("'", "")          # path in the sandbox
+        fn = (args.get("function") or "main").replace("'", "")
+        # analyze, seek to the function (by name or sym.<name>), pseudo-C + disasm
+        # Prefer pdg (r2ghidra = Ghidra's decompiler engine) when installed,
+        # fall back to pdc (r2's lighter built-in pseudo-C).
+        cmd = (f"r2 -q -A -e scr.color=0 "
+               f"-c 's {fn} 2>/dev/null || s sym.{fn} 2>/dev/null; "
+               f"echo === PSEUDO-C ===; pdg 2>/dev/null || pdc 2>/dev/null; "
+               f"echo === DISASM ===; pdf' '{b}' 2>&1 | head -300")
+        return {"content": [{"type": "text", "text": sb.bash(cmd)}]}
+
+    return create_sdk_mcp_server(name="decomp", version="0.1", tools=[decompile])
+
+
 def _block_text(block) -> str | None:
     """Pull text out of an assistant TextBlock or a ToolResultBlock (flags often
     land only in raw command output)."""
@@ -105,10 +131,15 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 break
 
         if not found:
+            servers = {"ctf": _sandbox_server(sb)}
+            tools = ["mcp__ctf__sandbox_bash"]
+            if spec in ("rev", "pwn"):  # binary work gets a decompiler MCP server
+                servers["decomp"] = _decompiler_server(sb)
+                tools.append("mcp__decomp__decompile")
             options = ClaudeAgentOptions(
                 system_prompt=SPECIALISTS[spec],
-                mcp_servers={"ctf": _sandbox_server(sb)},
-                allowed_tools=["mcp__ctf__sandbox_bash"],
+                mcp_servers=servers,
+                allowed_tools=tools,
                 max_turns=max_turns,
             )
             base = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"

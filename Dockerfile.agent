@@ -34,6 +34,9 @@ RUN git clone --depth 1 https://github.com/RsaCtfTool/RsaCtfTool /opt/RsaCtfTool
 # uses ast.Str, removed in py3.12+ (Kali py3.13). pwntools' own ROP() + one_gadget
 # cover ROP-chaining without them.
 RUN pip3 install --break-system-packages pwntools angr r2pipe
+# r2ghidra: Ghidra's decompiler engine as an r2 plugin (`pdg`) — Ghidra-quality
+# output, no JDK/GUI. Powers the `decompile` MCP tool. Non-fatal if the build fails.
+RUN r2pm -U && r2pm -ci r2ghidra || echo "r2ghidra skipped (decompile falls back to pdc)"
 RUN pip3 install --break-system-packages ROPgadget ropper || echo "ropgadget/ropper skipped (py3.13 filebytes incompat)"
 RUN gem install one_gadget || true
 # pwndbg for interactive GDB (also exposed via pwndbg-mcp on the host side)
