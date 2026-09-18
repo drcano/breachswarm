@@ -4,6 +4,7 @@ The trace (list of {kind, ...} events) is the deterministic ground truth. The
 writeup is just narration of it, so it can't invent steps that didn't happen.
 """
 from __future__ import annotations
+from config import MODEL
 
 import json
 from claude_agent_sdk import query, ClaudeAgentOptions
@@ -40,7 +41,7 @@ async def generate(name: str, prompt: str, trace: list[dict],
     md = []
     try:
         async for msg in query(prompt=task,
-                               options=ClaudeAgentOptions(system_prompt=_SYS, max_turns=3)):
+                               options=ClaudeAgentOptions(system_prompt=_SYS, max_turns=3, model=MODEL)):
             for block in getattr(msg, "content", []) or []:
                 if text := getattr(block, "text", None):
                     md.append(text)

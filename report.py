@@ -7,6 +7,7 @@ severity + vector + justification, CWE, affected asset, numbered repro/PoC, impa
 remediation, references). Grounded in a CWE/CVSS reference so severity isn't guessed.
 """
 from __future__ import annotations
+from config import MODEL
 
 from claude_agent_sdk import query, ClaudeAgentOptions
 from writeup import _render, _fallback
@@ -64,7 +65,7 @@ async def generate_report(program: str, target: str, trace: list[dict]) -> str:
     md = []
     try:
         async for msg in query(prompt=task,
-                               options=ClaudeAgentOptions(system_prompt=REPORT_SYS, max_turns=3)):
+                               options=ClaudeAgentOptions(system_prompt=REPORT_SYS, max_turns=3, model=MODEL)):
             for b in getattr(msg, "content", []) or []:
                 if t := getattr(b, "text", None):
                     md.append(t)

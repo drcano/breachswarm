@@ -19,6 +19,7 @@ from claude_agent_sdk import (query, ClaudeAgentOptions,
                               AssistantMessage, ResultMessage)
 
 from solver import _sandbox_server, _block_text
+from config import MODEL
 
 _SYS = (
     "You are a focused RECON subagent in a sandboxed Kali container with a "
@@ -42,9 +43,9 @@ AREAS = {
 }
 
 
-# Recon is shallow enumeration, not exploitation reasoning — run it on a cheap model
-# so the fan-out doesn't blow the token budget (the flaw the first measurement found).
-RECON_MODEL = "claude-haiku-4-5-20251001"
+# Recon shares the system MODEL (config.py). The diagnostic showed model quality
+# drives map quality (haiku flailed, sonnet/opus prioritize) — worth the tokens.
+RECON_MODEL = MODEL  # entire system on one model (see config.py)
 
 
 async def _run_area(sb, target: str, ctx: str, name: str, focus: str,

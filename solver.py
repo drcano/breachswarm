@@ -30,6 +30,7 @@ from recon import recon, brief_text
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
 from writeup import generate, save_audit
+from config import MODEL
 
 
 @dataclass
@@ -202,6 +203,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 mcp_servers=servers,
                 allowed_tools=tools,
                 max_turns=max_turns,
+                model=MODEL,
             )
             base = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"
                     "The challenge files are in your current working directory. Find the flag.")

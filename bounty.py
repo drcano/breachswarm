@@ -22,6 +22,7 @@ from claude_agent_sdk import (query, ClaudeAgentOptions, tool,
                               ResultMessage)
 from sandbox import make_sandbox
 from scope import Scope
+from config import MODEL
 from specialists import SPECIALISTS
 from writeup import save_audit
 from report import generate_report
@@ -96,7 +97,7 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
                           network_name=net_name, proxy_url=proxy_url) as sb:
             opts = ClaudeAgentOptions(
                 system_prompt=BOUNTY_SYS, mcp_servers={"ctf": _server(sb)},
-                allowed_tools=["mcp__ctf__sandbox_bash"], max_turns=max_turns)
+                allowed_tools=["mcp__ctf__sandbox_bash"], max_turns=max_turns, model=MODEL)
             recon_turns, recon_cost, recon_map = 0, 0.0, ""
             usages = []  # raw ResultMessage.model_usage dicts for token-based costing
             if parallel_recon:
