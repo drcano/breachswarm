@@ -22,12 +22,21 @@ _PLACEHOLDERS = {"...", "…", "flag", "flaghere", "flag_here", "xxx", "example"
 # so a real themed flag (e.g. "greatest_hits") is never rejected.
 _DECOY_TOKENS = {"test", "fake", "sample", "dummy", "placeholder", "changeme",
                  "example", "redacted"}
+# Self-labeling decoys/honeypots (e.g. /api/debug returning
+# flag{debug_endpoint_not_the_real_flag}). Matched as normalized substrings — no
+# real flag announces itself as fake, so this is safe and target-agnostic (works on
+# unknown live targets where we can't hardcode the decoy string).
+_DECOY_SUBSTR = ("notthereal", "notrealflag", "decoy", "honeypot", "fakeflag",
+                 "donotuse", "notaflag", "nottheflag")
 _LEET = str.maketrans("013457", "oieast")
 
 
 def _is_placeholder(flag: str) -> bool:
     body = flag[flag.find("{") + 1:flag.rfind("}")].strip().lower()
     if body in _PLACEHOLDERS or "..." in body or "…" in body:
+        return True
+    norm = re.sub(r"[^a-z0-9]", "", body)
+    if any(s in norm for s in _DECOY_SUBSTR):     # self-labeled decoy/honeypot
         return True
     # any token (leet-normalized) that is a decoy marker -> placeholder
     return any(re.sub(r"[^a-z0-9]", "", t).translate(_LEET) in _DECOY_TOKENS
@@ -82,6 +91,9 @@ def demo() -> None:
     assert find_flag("char *flag = picoCTF{T3ST_fl4g_f0rm4t_5tr1ng_abcd1234};") is None
     assert find_flag("picoCTF{FAKE_local_test}") is None
     assert find_flag("picoCTF{test_flag}") is None
+    # self-labeling honeypot/decoy flags (from a /debug endpoint) are not answers
+    assert find_flag("flag{debug_endpoint_not_the_real_flag}") is None
+    assert find_flag("flag{this_is_a_decoy}") is None
     # ...but a real themed flag with leet or the word 'greatest' is NOT rejected
     assert find_flag("picoCTF{greatest_h1ts_2024}") == "picoCTF{greatest_h1ts_2024}"
     assert find_flag("picoCTF{h3llo_w0rld}") == "picoCTF{h3llo_w0rld}"
