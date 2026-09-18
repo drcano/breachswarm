@@ -155,6 +155,25 @@ def _waf_nudge(out: str, state: dict) -> str:
     return ""
 
 
+# Rate-limit / throttle signatures. Firing more requests when throttled just extends the ban;
+# a good operator backs off and PACES. One-shot nudge to switch strategy.
+_RATE_SIGNALS = ("429", "rate limit", "too many requests", "slow down", "retry after",
+                 "temporarily banned", "throttled")
+
+
+def _rate_nudge(out: str, state: dict) -> str:
+    low = (out or "").lower()
+    if "flag{" in low or state.get("rate_hinted"):
+        return ""
+    if any(s in low for s in _RATE_SIGNALS):
+        state["rate_hinted"] = True
+        return ("\n\n[rate limited] you are being throttled — firing more requests only extends "
+                "the ban. BACK OFF and PACE: put a delay between requests (sleep ~0.3–1s), and "
+                "run any extraction as ONE self-contained script (a loop that sleeps AND retries "
+                "on HTTP 429 with backoff), not many separate tool calls. Slow and steady wins.")
+    return ""
+
+
 def _sandbox_server(sb):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
     Wraps each result with the dead-end detector + decoy feedback + WAF-evasion nudge."""
@@ -165,7 +184,8 @@ def _sandbox_server(sb):
     async def sandbox_bash(args):
         out = sb.bash(args["command"])
         return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)
-                             + _decoy_nudge(out) + _waf_nudge(out, stall)}]}
+                             + _decoy_nudge(out) + _waf_nudge(out, stall)
+                             + _rate_nudge(out, stall)}]}
 
     return create_sdk_mcp_server(name="ctf", version="0.1", tools=[sandbox_bash])
 

@@ -4,7 +4,7 @@ Run: ./.venv/bin/python test_ctf_agent.py
 from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
-from solver import _is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge
+from solver import _is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
 from audit_chain import AuditChain, verify as audit_verify
@@ -116,6 +116,14 @@ def test_waf_nudge():
     assert _waf_nudge("still blocked (suspicious input)", st) == ""   # one-shot per run
     assert _waf_nudge("HTTP/1.1 200 OK", {}) == ""                    # clean response, no fire
     assert _waf_nudge("here is the flag{real_one}", {}) == ""         # never on a flag
+
+
+def test_rate_nudge():
+    st = {}
+    n = _rate_nudge('{"error":"429 rate limit — slow down"}', st).lower()
+    assert "back off" in n and "429" in n and "sleep" in n
+    assert _rate_nudge("429 again", st) == ""            # one-shot per run
+    assert _rate_nudge("HTTP/1.1 200 OK", {}) == ""      # clean response, no fire
 
 
 def test_audit_chain():

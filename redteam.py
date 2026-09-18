@@ -28,7 +28,7 @@ from audit_chain import AuditChain, verify as audit_verify
 from techniques import classify, outcome_from, scorecard, render as render_scorecard
 from safety import guard_destructive, announce
 from bounty import BOUNTY_SYS, _start_enforcement
-from solver import _knowledge_server, _stall_nudge, _decoy_nudge, _waf_nudge
+from solver import _knowledge_server, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge
 from sandbox import make_sandbox
 from report import generate_report
 from writeup import save_audit
@@ -62,7 +62,8 @@ def _server(sb, audit: AuditChain, events: list, fp: dict, destructive_ok: bool)
         if techs:
             events.append({"payload": cmd, "blocked": blocked, "success": success})
         return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)
-                             + _decoy_nudge(out) + _waf_nudge(out, stall)}]}
+                             + _decoy_nudge(out) + _waf_nudge(out, stall)
+                             + _rate_nudge(out, stall)}]}
 
     return create_sdk_mcp_server(name="ctf", version="1.0", tools=[sandbox_bash])
 
