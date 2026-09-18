@@ -5,7 +5,7 @@ CTFs and runs authorized bug-bounty assessments. Portfolio piece for an FDE role
 
 ## Layout
 - `solver.py` — orchestrator + specialist runner + deterministic verifier (core loop)
-- `specialists.py` — 6 category specialists (crypto/rev/pwn/web/forensics/misc) + `llm`
+- `specialists.py` — category specialists (crypto/rev/pwn/web/forensics/misc/osint) + `llm`
 - `recon.py` — deterministic category-aware probes (no LLM); can zero-turn solve
 - `run.py` — parallel batch runner over `challenges/<set>/*/challenge.json`
 - `sandbox.py` — Docker/local sandbox factory (per-category network isolation)

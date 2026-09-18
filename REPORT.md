@@ -1,5 +1,7 @@
 # CTF Agent — Findings Report
 
+> **⚠️ Superseded numbers.** This predates the full 100-task InterCode run. The current, canonical benchmark is **70/100 (pass@1)** — see [README.md](README.md) and `results/intercode100.jsonl`. The smaller figures below were early partial runs, kept for history.
+
 A multi-agent system that autonomously solves capture-the-flag (CTF) challenges,
 built on the Claude Agent SDK and benchmarked on InterCode-CTF. This report covers
 what was built, how it was measured, the results, and what was learned.

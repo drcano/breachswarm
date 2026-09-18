@@ -1,5 +1,7 @@
 # Overnight status — 2026-09-17
 
+> **⚠️ Superseded numbers.** This predates the full 100-task InterCode run. The current, canonical benchmark is **70/100 (pass@1)** — see [README.md](README.md) and `results/intercode100.jsonl`. The smaller figures below were early partial runs, kept for history.
+
 Morning summary of what got built, what the numbers are, and what's blocked.
 
 ## TL;DR

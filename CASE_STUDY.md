@@ -40,7 +40,7 @@ steps, impact, and remediation. Full report: [docs/juiceshop_findings.md](docs/j
 
 ## The unit economics (measured, not estimated)
 
-From `bounty_metrics.jsonl` — real per-run cost and turn counts:
+From `results/bounty_metrics.jsonl` (SDK-reported cost — see pricing.py for the token-based cross-check caveat):
 
 | Run | Target | Turns | Cost | Output |
 |---|---|---|---|---|

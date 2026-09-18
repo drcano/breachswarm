@@ -4,7 +4,6 @@ __pycache__/
 # solver outputs — keep only the merged evidence file
 results.jsonl
 results.*.jsonl
-!results.local.jsonl
 challenges/
 **/audit.jsonl
 **/writeup.md

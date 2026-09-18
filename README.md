@@ -38,7 +38,7 @@ The 6 gap tasks recover the **exactly correct** flag content and differ only in
 letter case (e.g. `picoCTF{9c174346}` vs gold `picoCTF{9C174346}` — a hex hash;
 or a decoded phrase the cipher emits uppercase). That's a known casing
 inconsistency in the InterCode gold set, not a solver failure — hence both numbers
-are reported. Median time-to-flag on solved tasks: **13.5s** (fastest 0.3s via a
+are reported. Median time-to-flag on solved tasks: **13.5s** (fastest 0.4s via a
 zero-turn recon pass, at no model cost).
 
 Strict = exact match to the gold flag (the same check picoCTF runs). Real solves
@@ -60,8 +60,9 @@ reference, published CTF agents score ~22% on the harder NYU-CTF / Cybench sets.
   surfaces the flag itself.
 - **Zero-turn fast-path.** If recon already found the flag, the challenge is solved
   with **no LLM call at all**.
-- **Six expert specialists.** Each carries a tactical decision-tree playbook and a
-  scoped tool set — crypto, reversing, pwn, web, forensics, general.
+- **Expert specialists.** Each carries a tactical decision-tree playbook and a
+  scoped tool set — crypto, reversing, pwn, web, forensics, general, osint, and an
+  `llm` specialist for the OWASP LLM Top 10.
 - **Deterministic verifier.** The flag format is the checker; the loop auto-stops
   the instant a real flag appears. Placeholder/encoded look-alikes are rejected.
 - **Isolated sandboxes.** One Kali container per challenge (Rosetta runs x86-64 on
@@ -123,7 +124,7 @@ docker build -t ctf-agent:full   -f Dockerfile.agent .  # + pwn/web/decompile to
 | `Dockerfile.lean` / `Dockerfile.agent` | sandbox images |
 
 ```bash
-./.venv/bin/python test_ctf_agent.py     # 6 test groups, no deps
+./.venv/bin/python test_ctf_agent.py     # 9 test groups, no deps
 ```
 
 ## Real-world validation — it exploits a live target
@@ -164,7 +165,7 @@ bounty pipeline (`bounty.py`, scope-gated) produced client-ready reports:
   → [docs/vulnweb_rest_findings.md](docs/vulnweb_rest_findings.md)
 
 Each finding carries a CVSS 3.1 vector, CWE, affected asset, repro steps, impact,
-and remediation. See [CASE_STUDY.md](CASE_STUDY.md) for the measured economics.
+and remediation. See [CASE_STUDY.md](CASE_STUDY.md) for the measured economics (SDK-reported cost).
 
 Each run ends with a clean, publishable writeup the agent generated itself.
 
@@ -209,5 +210,5 @@ GhidraMCP for decompilation and a multi-finding report generator.
 - **[docs/mcp_integration.md](docs/mcp_integration.md)** — how MCP servers are
   wired into the agent loop (in-process vs external; the decompiler tool).
 - **[results/](results/)** — raw benchmark evidence (JSONL, ground-truth flags).
-- [REPORT.md](REPORT.md) · [STATUS.md](STATUS.md) · `docs/how-it-works.html`
+- [REPORT.md](REPORT.md) · [STATUS.md](STATUS.md) — *early build logs (partial numbers, superseded by the 70/100 above)* · `docs/how-it-works.html`
   (visual walkthrough).

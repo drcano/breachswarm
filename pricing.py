@@ -1,15 +1,20 @@
-"""Token-based cost accounting — self-verifiable, not SDK-trusted.
+"""Token-based cost accounting.
 
-The SDK hands back a single opaque `total_cost_usd`. This instead reads the raw
-per-model token counts from `ResultMessage.model_usage` (ground truth) and recomputes
-cost from a VISIBLE rate table, so any figure we report can be re-derived from
-tokens × rates rather than taken on faith. We also surface the SDK's own per-model
-`costUSD` alongside, so a divergence between the two is a signal (e.g. stale rates).
+What's ground truth here is the raw per-model TOKEN COUNTS from
+`ResultMessage.model_usage` — those are exact and re-derivable. The dollar figure is
+NOT: it's token counts × the RATES table below, and those rates are an editable
+assumption I have not verified against current Anthropic pricing.
 
-RATES are USD per 1,000,000 tokens. VERIFY against current Anthropic pricing before
-quoting the recomputed number as billed cost — token counts are exact, rates are the
-editable assumption. cache_read ≈ 0.1× input, cache_write ≈ 1.25× input (standard
-Anthropic cache pricing structure).
+Honest status (measured): `cost_recomputed_usd` currently runs ~2× the SDK's own
+`costUSD` on cache-heavy runs (e.g. Fortress: SDK $3.26 vs recomputed $8.93) — that
+gap means the RATES here (opus base and/or cache-read pricing) are stale, NOT that
+the SDK is wrong. So treat **the SDK `costUSD` / `cost_sdk_usd` as authoritative**
+and the recomputed number as an uncalibrated cross-check until RATES are corrected.
+We record both plus the exact token counts so nothing is taken on faith.
+
+RATES are USD per 1,000,000 tokens; cache_read ≈ 0.1× input, cache_write ≈ 1.25×
+input (standard structure). Calibrate them against a known billed run before quoting
+the recomputed dollar figure as real cost.
 """
 from __future__ import annotations
 

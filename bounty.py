@@ -22,7 +22,7 @@ from pathlib import Path
 from claude_agent_sdk import (query, ClaudeAgentOptions, tool,
                               create_sdk_mcp_server, AssistantMessage, TextBlock,
                               ResultMessage)
-from sandbox import make_sandbox
+from sandbox import make_sandbox, IMAGE as SANDBOX_IMAGE
 from scope import Scope
 from config import MODEL
 from specialists import SPECIALISTS
@@ -88,7 +88,7 @@ def _server(sb):
     return create_sdk_mcp_server(name="ctf", version="1.0", tools=[sandbox_bash]), fp
 
 
-def _start_enforcement(scope_path: str, image: str = "ctf-agent:full"):
+def _start_enforcement(scope_path: str, image: str = SANDBOX_IMAGE):
     """No-bypass egress: internal-only network + an allowlisting proxy that is the
     agent's ONLY route out. Returns (network_name, proxy_url, cleanup)."""
     net = f"bnet_{uuid.uuid4().hex[:8]}"
