@@ -157,6 +157,11 @@ bounty pipeline (`bounty.py`, scope-gated) produced client-ready reports:
   **`--enforce`** no-bypass egress guard at 2 req/s: 5 findings incl. 2 Critical SQLi
   (auth bypass + DB read) and path traversal, in 26 turns / 101s / $0.99. One finding
   independently re-verified by hand. → [docs/vulnweb_findings.md](docs/vulnweb_findings.md)
+- **rest.vulnweb.com (LIVE external REST API)** — Invicti's authorized Vulnerable
+  REST API, enforced egress: 6 findings incl. UNION SQLi (dumped users, SHA-1 hashes,
+  OAuth secret `n3tsp4rk3r_s3cr3t`, MySQL `root@%`), forgeable JWT (`supersecret`),
+  and XXE file read — 69 turns / 339s / $1.85. UNION SQLi independently re-verified.
+  → [docs/vulnweb_rest_findings.md](docs/vulnweb_rest_findings.md)
 
 Each finding carries a CVSS 3.1 vector, CWE, affected asset, repro steps, impact,
 and remediation. See [CASE_STUDY.md](CASE_STUDY.md) for the measured economics.
