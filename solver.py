@@ -15,6 +15,7 @@ create_sdk_mcp_server / query API.
 """
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -91,7 +92,10 @@ def _stall_nudge(out: str, state: dict) -> str:
     """Fire a widen-note when dead-ends are DENSE in a sliding window — not just
     strictly consecutive. Agents intersperse one good probe to dodge a consecutive
     counter (observed: streak capped at 3), but the fixation is still ~4-of-6 dead
-    ends. state carries {'window':[bool], 'cooldown':int}."""
+    ends. state carries {'window':[bool], 'cooldown':int}. Disable with
+    CTF_DETECTOR=0 (used by bench_detector.py to A/B-measure its effect)."""
+    if os.getenv("CTF_DETECTOR", "1") == "0":
+        return ""
     w = state.setdefault("window", [])
     w.append(_is_unproductive(out))
     if len(w) > _STALL_WINDOW:
