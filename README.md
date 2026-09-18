@@ -69,6 +69,15 @@ reference, published CTF agents score ~22% on the harder NYU-CTF / Cybench sets.
   Apple Silicon), or a local backend for fast iteration.
 - **Every run is auditable.** A timestamped `audit.jsonl` (ground truth) plus an
   LLM-written `writeup.md` — the model can't claim a step it didn't take.
+- **Retrieval knowledge base (RAG), measured.** 35 dense technique cards (37 chunks)
+  across every specialist — web money-bugs, injection/SSRF/SSTI/deserialization/GraphQL/
+  NoSQLi, crypto (RSA/padding-oracle), pwn (ROP/format-string), reversing, forensics —
+  plus an exploit-**chains** playbook. The agent pulls cards on demand
+  (`search_knowledge`), and recon **fingerprints the target and auto-loads the matching
+  cards** into the brief (Werkzeug→SSTI, `/graphql`→GraphQL, PHP→LFI). Retrieval is stdlib
+  TF-IDF; `eval_rag.py` gates it at **recall@1 26/28, recall@3 28/28** (up from 8/25 before
+  the expansion). Grow it by dropping a `knowledge/*.md`. Coverage:
+  [docs/knowledge_coverage.md](docs/knowledge_coverage.md).
 
 ## Engineering rigor (the honest part)
 
@@ -79,6 +88,34 @@ reference, published CTF agents score ~22% on the harder NYU-CTF / Cybench sets.
   auto-terminator that stopped on rot13 flag look-alikes. Rev 6/10 → 8/10 after
   tightening flag extraction. Each fix: find the failure mode, fix, re-measure.
 - **Crash-safe, parallel runner** with per-challenge retry and cost caps.
+
+## Measured architecture decisions — what won, what lost
+
+The interesting engineering isn't the code that shipped, it's the code that was *measured
+and rejected*. A head-to-head A/B harness (`bench_orchestrator.py`) pit a single-agent
+baseline against a **multi-agent exploit orchestrator** (a lead agent that plans a kill
+chain and delegates each stage to fresh specialist sub-agents on a shared blackboard) and a
+**stateful** single agent (explicit artifact blackboard) on two chained targets — Fortress
+(4-stage) and Gauntlet (5-stage).
+
+| target | mode | solved | avg wall | verdict |
+|---|---|---|---|---|
+| Gauntlet (5-stage) | baseline | **2/2** | 187s | fastest |
+| | stateful | **2/2** | 164s | ties baseline |
+| | orchestrator | **1/2** | 637s | **fewer solves, 3.4× slower, real $** |
+| Fortress (4-stage) | baseline | 0/2* | 1167s | *validation run solved (~1030s) |
+| | orchestrator | 0/1 | 2817s | most expensive ($6.51/run) |
+
+**The multi-agent orchestrator lost** — it solved *less* reliably and ran 3.4× slower at
+real token cost; a single agent's context already carries chain state fine. Explicit state
+merely tied. **A single well-equipped agent (RAG + recon-playbook) stays the default;** the
+orchestrator and stateful modes are kept as opt-in, documented experiments. The A/B harness
+also acted as a fuzzer, surfacing **three real correctness bugs** in the solve loop
+(silent-decoy flail, crash-on-budget-exhaustion, false-positive flag match) — each fixed
+with a regression test. And a clean finding: **chain depth ≠ difficulty** — the deeper
+Gauntlet solved in ~3 min while Fortress's WAF-evasion S1 was the real wall, which validates
+the RAG (clean technique→card mapping = fast solves). Full writeup + numbers:
+[docs/OVERNIGHT.md](docs/OVERNIGHT.md).
 
 ## Full-stack console
 
@@ -112,9 +149,13 @@ docker build -t ctf-agent:full   -f Dockerfile.agent .  # + pwn/web/decompile to
 | File | Role |
 |---|---|
 | `solver.py` | orchestrator + specialist runner + verifier + fast-path + retry |
-| `recon.py` | deterministic recon + category-aware deep probes |
-| `specialists.py` | six expert playbooks + category routing |
-| `flag.py` | flag detection, scoring, near-miss, placeholder rejection |
+| `recon.py` | deterministic recon + web enumeration + recon→playbook auto-load |
+| `specialists.py` | expert playbooks (crypto/rev/pwn/web/forensics/misc/osint/llm) + routing |
+| `knowledge_base.py` + `knowledge/` | RAG: TF-IDF retriever + 35 technique cards |
+| `eval_rag.py` | retrieval eval harness (recall@1/@3), corpus-growth guardrail |
+| `orchestrator.py` · `stateful.py` | opt-in multi-agent & stateful chain solvers (A/B) |
+| `bench_orchestrator.py` · `analyze_ab.py` | chain A/B harness + summarizer |
+| `flag.py` | flag detection, scoring, near-miss, placeholder + decoy rejection |
 | `sandbox.py` | Docker + local execution backends |
 | `writeup.py` | audit-trace → human writeup |
 | `run.py` | parallel batch runner + live solve-rate |
@@ -124,7 +165,8 @@ docker build -t ctf-agent:full   -f Dockerfile.agent .  # + pwn/web/decompile to
 | `Dockerfile.lean` / `Dockerfile.agent` | sandbox images |
 
 ```bash
-./.venv/bin/python test_ctf_agent.py     # 9 test groups, no deps
+./.venv/bin/python test_ctf_agent.py     # 10 test groups, no deps
+./.venv/bin/python eval_rag.py           # RAG retrieval eval (recall@1/@3)
 ```
 
 ## Real-world validation — it exploits a live target
@@ -200,6 +242,10 @@ GhidraMCP for decompilation and a multi-finding report generator.
 
 ## Read next
 
+- **[docs/OVERNIGHT.md](docs/OVERNIGHT.md)** — the RAG expansion, the multi-agent A/B
+  (measured & rejected), the three bugs the harness caught, and the ranked next steps.
+- **[docs/knowledge_coverage.md](docs/knowledge_coverage.md)** — the full RAG corpus index.
+- **[docs/targets.md](docs/targets.md)** — vetted authorized proving-ground & bounty targets.
 - **[CASE_STUDY.md](CASE_STUDY.md)** — unknown target → client-ready report, with
   measured unit economics (~$0.60–0.66/finding).
 - **[DEMO.md](DEMO.md)** — 90-second demo storyboard + one-command reproductions.
