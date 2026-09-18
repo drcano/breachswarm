@@ -11,6 +11,10 @@ unauthorized access.
       testing.** Many programs forbid it — if it's not clearly permitted, stop.
 - [ ] Note the exact policy URL and the sentence that grants it.
 
+See [`docs/targets.md`](targets.md) for the qualify-before-run checklist and the two
+programs research surfaced as automation-permitting (Shopify, Google VRP) — re-verify each
+program's live policy every time; silence ≠ permission.
+
 ## 2. Declare scope in a file
 
 Copy `scope.example.json` → `scope.mine.json` and fill it in:
