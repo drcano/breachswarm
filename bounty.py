@@ -12,6 +12,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
+from collections import defaultdict
 import subprocess
 import time
 import uuid
@@ -36,16 +38,54 @@ BOUNTY_SYS = SPECIALISTS["web"] + (
     "destructive actions (no data deletion, no DoS, no account lockouts). Enumerate "
     "and safely confirm real vulnerabilities (OWASP classes). For each finding record: "
     "class, endpoint, a minimal proof-of-concept request, observed evidence, impact, "
-    "and remediation."
+    "and remediation.\n"
+    "STEALTH / LOW FOOTPRINT (a good authorized tester is a ninja, not a bull): keep "
+    "the request count MINIMAL. Do NOT brute-force endpoint names with wordlists or "
+    "`for` loops of dozens of guesses — enumerate from links/JS/known routes instead. "
+    "Form a hypothesis and send the ONE right request rather than spraying payload "
+    "variants. NEVER re-probe an endpoint that already returned errors (404/403/500) — "
+    "it is a dead end or a tarpit; move on. One clean proof per finding is enough; "
+    "stop as soon as a vuln is confirmed. Every wasted error request is noise a "
+    "defender sees."
 )
 
 
 def _server(sb):
+    """Stealth-aware sandbox tool: dead-end detector (from solver) + a per-endpoint
+    circuit breaker that STOPS sending real traffic to endpoints that keep erroring
+    (the 190-hit tarpit in the Fortress run). Tracks a request/error footprint."""
+    from solver import _stall_nudge, _is_unproductive
+    stall = {"window": [], "cooldown": 0}
+    endpoint_errs = defaultdict(int)   # path -> consecutive error count
+    fp = {"tool_calls": 0, "error_results": 0, "circuit_blocks": 0}
+    ERR_THRESH = 3
+
+    def _paths(cmd):
+        return re.findall(r'https?://[^/\s"\']+/([^\s"\'?]*)', cmd or "")
+
     @tool("sandbox_bash", "Run a shell command in the (network-enabled) sandbox",
           {"command": str})
     async def sandbox_bash(args):
-        return {"content": [{"type": "text", "text": sb.bash(args["command"])}]}
-    return create_sdk_mcp_server(name="ctf", version="1.0", tools=[sandbox_bash])
+        cmd = args.get("command", "")
+        paths = _paths(cmd)
+        tripped = sorted({p for p in paths if endpoint_errs[p] >= ERR_THRESH})
+        if tripped:  # circuit open: refuse to send more real traffic to dead endpoints
+            fp["circuit_blocks"] += 1
+            return {"content": [{"type": "text", "text":
+                    f"[stealth/circuit-open] endpoint(s) {tripped} already returned "
+                    f"errors {ERR_THRESH}+ times — request NOT sent (footprint control). "
+                    "These are dead ends/tarpits. Pivot to a different endpoint or "
+                    "technique; do not keep probing them."}]}
+        out = sb.bash(cmd)
+        fp["tool_calls"] += 1
+        err = _is_unproductive(out)
+        if err:
+            fp["error_results"] += 1
+        for p in paths:            # per-endpoint: count errors, reset on a clean hit
+            endpoint_errs[p] = endpoint_errs[p] + 1 if err else 0
+        return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)}]}
+
+    return create_sdk_mcp_server(name="ctf", version="1.0", tools=[sandbox_bash]), fp
 
 
 def _start_enforcement(scope_path: str, image: str = "ctf-agent:full"):
@@ -95,8 +135,9 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
     try:
         with make_sandbox(workdir / "files", network=True,
                           network_name=net_name, proxy_url=proxy_url) as sb:
+            ctf_srv, footprint = _server(sb)
             opts = ClaudeAgentOptions(
-                system_prompt=BOUNTY_SYS, mcp_servers={"ctf": _server(sb)},
+                system_prompt=BOUNTY_SYS, mcp_servers={"ctf": ctf_srv},
                 allowed_tools=["mcp__ctf__sandbox_bash"], max_turns=max_turns, model=MODEL)
             recon_turns, recon_cost, recon_map = 0, 0.0, ""
             usages = []  # raw ResultMessage.model_usage dicts for token-based costing
@@ -150,6 +191,7 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
            "tokens": usage["tokens"],
            "cost_recomputed_usd": usage["cost_recomputed_usd"],
            "cost_sdk_usd": usage["cost_sdk_usd"],
+           "footprint": footprint,
            "report": str(workdir / "findings.md")}
     with open(METRICS, "a") as f:
         f.write(json.dumps(row) + "\n")
