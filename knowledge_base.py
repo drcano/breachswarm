@@ -73,6 +73,10 @@ class KnowledgeBase:
         self._idf = {t: math.log(1 + n / (1 + d)) for t, d in df.items()}
 
     def search(self, query: str, k: int = 3) -> list[dict]:
+        # NB: tried BM25 (k1=1.5,b=0.75) here — it REGRESSED retrieval on this corpus
+        # (recall@1 lost the SSTI query: "code execution" saturated toward pwn cards,
+        # swamping the decisive rare term "template"). TF-IDF with a heading boost wins
+        # the head-to-head on eval_rag.py, so we keep it. See docs/OVERNIGHT.md.
         q = _tok(query)
         scored = []
         for c, tf in zip(self.chunks, self._tf):

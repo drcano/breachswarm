@@ -1,0 +1,5 @@
+## Open Redirect
+Where: `redirect`/`return`/`returnUrl`/`next`/`url`/`dest`/`continue`/`callback`/`r`/`u` params, logout links, login `?next=`, OAuth `redirect_uri`.
+Detect: set the param to `https://evil.com` and follow — 30x `Location:` or JS/meta redirect to your host = open redirect.
+Filter bypass: `//evil.com` (protocol-relative), `https:evil.com`, `/\evil.com`, `\/\/evil.com`, `https://allowed.com@evil.com` (userinfo), `https://evil.com#allowed.com`, `https://evil.com?allowed.com`, `https://allowed.com.evil.com`, `https://evil.com/allowed.com`, double-encode, `%09`/`%00`/whitespace tricks, `javascript:`/`data:` for XSS-via-redirect.
+Escalate (this is why it matters): OAuth/SSO `redirect_uri` -> steal the `code`/token by redirecting the flow to your host = full account takeover; chain to reflected XSS (`javascript:` sink); bypass SSRF allowlists (redirect from an allowed host to `169.254.169.254`); phishing on a trusted domain. Alone it's low; chained (esp. OAuth token theft) it's critical.

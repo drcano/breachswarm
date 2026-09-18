@@ -57,11 +57,17 @@ def test_routing():
 
 def test_knowledge_base():
     kb = KnowledgeBase()
-    assert len(kb.chunks) >= 8, "technique cards not loaded"
+    assert len(kb.chunks) >= 30, "expanded technique corpus not loaded"
     # natural-language queries must retrieve the right technique card at rank 1
     assert "union/**/select" in kb.search("bypass WAF union select", 1)[0]["text"].lower()
-    assert "169.254" in kb.search("read cloud metadata credentials", 1)[0]["text"]
+    # "cloud metadata via ssrf" disambiguated from LFI file-read (both read cloud creds)
+    assert "169.254" in kb.search("ssrf fetch cloud metadata endpoint", 1)[0]["text"]
     assert "{{7*7}}" in kb.search("code execution from a template field", 1)[0]["text"]
+    # expanded classes retrieve their card (regression guard for the big corpus)
+    assert "pickle" in kb.search("insecure deserialization rce", 1)[0]["text"].lower()
+    assert "$ne" in kb.search("nosql mongodb auth bypass operator", 1)[0]["text"].lower()
+    assert "cube root" in kb.search("rsa small exponent e=3", 1)[0]["text"].lower()
+    assert "chain" in kb.search("combine primitives multi-stage escalation", 1)[0]["text"].lower()
 
 
 def test_pricing():
