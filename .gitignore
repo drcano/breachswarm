@@ -40,3 +40,4 @@ logs/
 scope.*.json
 !scope.example.json
 results/ab_traces/
+redteam_runs/

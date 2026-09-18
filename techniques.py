@@ -30,7 +30,9 @@ _SIGS: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"union[\s/*]+select|information_schema|\bor\b\s+1=1|sleep\(|pg_sleep", re.I), "T1190", "SQL injection"),
     (re.compile(r"\$ne\b|\$regex|\$where|\$gt\b", re.I), "T1190", "NoSQL injection"),
     (re.compile(r"\{\{.*\}\}|__globals__|\$\{.*\}|<%=|render_template_string", re.I), "T1190", "SSTI / template injection"),
-    (re.compile(r"(?:;|\||&&|\$\(|`)\s*(id|whoami|cat |uname|curl |wget )", re.I), "T1059", "OS command injection"),
+    # NB: no `curl`/`wget` here — the agent's OWN tooling uses `$(curl …)`, which would
+    # false-positive as command injection. Match the classic proof commands instead.
+    (re.compile(r"(?:;|\||&&|%3B|%0a)\s*(id|whoami|uname|cat\s+/etc|ls\s+-la)\b|\$\(\s*(id|whoami)\s*\)", re.I), "T1059", "OS command injection"),
     (re.compile(r"\.\./|%2e%2e|/etc/passwd|php://|\.\.%2f", re.I), "T1083", "path traversal / LFI"),
     (re.compile(r"169\.254\.169\.254|2852039166|0xa9fea9fe|metadata\.google|latest/meta-data", re.I), "T1071", "SSRF → cloud metadata"),
     (re.compile(r'"?(role|isadmin|is_admin|is_staff|account_type|verified)"?\s*[:=]\s*"?(admin|true|1)', re.I), "T1078", "mass assignment / priv-esc"),

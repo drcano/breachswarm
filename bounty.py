@@ -96,16 +96,20 @@ def _server(sb):
     return create_sdk_mcp_server(name="ctf", version="1.0", tools=[sandbox_bash]), fp
 
 
-def _start_enforcement(scope_path: str, image: str = SANDBOX_IMAGE):
+def _start_enforcement(config_path: str, image: str = SANDBOX_IMAGE,
+                       engagement: bool = False):
     """No-bypass egress: internal-only network + an allowlisting proxy that is the
-    agent's ONLY route out. Returns (network_name, proxy_url, cleanup)."""
+    agent's ONLY route out. With engagement=True the proxy enforces the full RoE
+    (live expiry + kill switch), not just the host allowlist. Returns
+    (network_name, proxy_url, cleanup)."""
     net = f"bnet_{uuid.uuid4().hex[:8]}"
     proxy = f"bproxy_{uuid.uuid4().hex[:8]}"
+    flag = "--engagement" if engagement else "--scope"
     subprocess.run(["docker", "network", "create", "--internal", net],
                    check=True, capture_output=True)
     subprocess.run(["docker", "run", "-d", "--name", proxy, "--network", net,
                     "-v", f"{Path.cwd()}:/work", "-w", "/work", image,
-                    "python3", "egress_proxy.py", "--scope", f"/work/{scope_path}",
+                    "python3", "egress_proxy.py", flag, f"/work/{config_path}",
                     "--port", "8888"], check=True, capture_output=True)
     subprocess.run(["docker", "network", "connect", "bridge", proxy],
                    check=True, capture_output=True)  # only the proxy gets internet

@@ -45,6 +45,7 @@ class Engagement:
     destructive: bool
     kill_switch: str | None        # path; if it exists, the engagement is aborted
     operator: str
+    deconfliction: str | None      # path to a shared white-cell channel for run notices
     _actions: list = field(default_factory=list)   # sliding-window action timestamps
 
     @classmethod
@@ -61,7 +62,8 @@ class Engagement:
             allowed_techniques=list(d.get("allowed_techniques", [])),
             loudness_budget_per_hour=int(d.get("loudness_budget_per_hour", 120)),
             destructive=bool(d.get("destructive", False)),
-            kill_switch=d.get("kill_switch"), operator=d.get("operator", ""))
+            kill_switch=d.get("kill_switch"), operator=d.get("operator", ""),
+            deconfliction=d.get("deconfliction"))
 
     # --- authorization gates ---
     def killed(self) -> bool:
