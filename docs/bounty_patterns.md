@@ -67,10 +67,28 @@ unauthenticated internal endpoints; verb/version tampering; secrets in responses
   business logic, filter-evasion SQLi), `targets/modern_app.py` (GraphQL, NoSQLi,
   XXE) — our lab already exercises most of the top classes.
 
+## Experiment: a prompt-level "chain-aware step" did NOT cut turns (negative result)
+
+Hypothesis: telling the specialist to chase a primitive's pivot before widening
+would cut the wasted turns seen on the chain target (baseline 20 turns). Measured on
+`C1_ssrf_chain`, one run per config:
+
+| Config | Turns | Note |
+|---|---|---|
+| No directive (baseline) | **20** | breadth found the loopback pivot fast |
+| Broad "chase one chain to its end before widening" | **50** | **backfired** — fixated on the leaked token, burned ~40 turns hunting where to use it (vault/s3/hostnames/ports) instead of the loopback |
+| Refined "try a leaked cred on already-seen surface first" | **24** | fixed the fixation but ≈ baseline; no real gain within run-to-run noise |
+
+Conclusion: the broad directive is actively harmful (suppresses the breadth that
+finds the pivot); the refined one is neutral. **Reverted both** — shipping a neutral
+change as a win would be dishonest. Cutting turns likely needs a *structural* change,
+not a prompt line: e.g. a dead-end detector that widens after N failed same-dimension
+probes, or a dedicated pivot tool. Single-run variance is high here — any real claim
+needs multi-run measurement.
+
 ## Next lethality upgrades (candidates)
 
-1. A **chain-aware verifier prompt**: after a primitive, force the "what does this
-   chain into?" step before concluding.
+1. **Structural dead-end detection** (see above) rather than a prompt directive.
 2. **Race-condition tooling** in the web specialist (concurrent request helper).
 3. A **BOLA sweeper**: given an authenticated session + an object-id param,
    auto-swap ids across a second identity.
