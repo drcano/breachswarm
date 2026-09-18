@@ -55,6 +55,7 @@ class Result:
     time_to_flag_s: float | None = None    # from start to the flag appearing
     writeup_path: str | None = None
     audit_path: str | None = None
+    error: str | None = None   # set when the run errored (e.g. rate limit); excluded from scoring
 
 
 def _sandbox_server(sb):
