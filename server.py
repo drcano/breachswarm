@@ -80,6 +80,7 @@ async def metrics():
     for r in rows:
         seen[(r["_src"], r.get("name"))] = r
     rows = list(seen.values())
+    rows = [r for r in rows if not r.get("error")]  # rate-limited/errored don't score
 
     by_cat = {}
     for r in rows:
@@ -103,8 +104,10 @@ async def metrics():
                 try: bounty.append(json.loads(line))
                 except Exception: pass
 
+    near = sum(1 for r in rows if r.get("near_miss"))
     return {
         "total": len(rows), "solved": len(solved),
+        "case_insensitive": len(solved) + near,  # +correct-flag/wrong-case
         "solve_rate": round(len(solved) / len(rows), 3) if rows else 0,
         "by_category": {c: {"total": b["total"], "solved": b["solved"],
                             "rate": round(b["solved"] / b["total"], 3) if b["total"] else 0}
