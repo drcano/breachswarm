@@ -17,10 +17,21 @@ DEFAULT_FLAG_RE = re.compile(r"(?:flag|ctf|pico|[A-Za-z0-9_]{2,10})\{[^}\s`]{1,2
 _PLACEHOLDERS = {"...", "…", "flag", "flaghere", "flag_here", "xxx", "example",
                  "redacted", "your_flag_here", "insert_flag_here"}
 
+# Decoy markers hardcoded in provided source/binaries (real flags come from the
+# exploit/remote, not the handed-out .c). Matched as whole leet-normalized tokens
+# so a real themed flag (e.g. "greatest_hits") is never rejected.
+_DECOY_TOKENS = {"test", "fake", "sample", "dummy", "placeholder", "changeme",
+                 "example", "redacted"}
+_LEET = str.maketrans("013457", "oieast")
+
 
 def _is_placeholder(flag: str) -> bool:
     body = flag[flag.find("{") + 1:flag.rfind("}")].strip().lower()
-    return body in _PLACEHOLDERS or "..." in body or "…" in body
+    if body in _PLACEHOLDERS or "..." in body or "…" in body:
+        return True
+    # any token (leet-normalized) that is a decoy marker -> placeholder
+    return any(re.sub(r"[^a-z0-9]", "", t).translate(_LEET) in _DECOY_TOKENS
+               for t in re.split(r"[_\-\s]+", body))
 
 
 def find_flag(text: str, pattern: str | None = None) -> str | None:
@@ -67,6 +78,13 @@ def demo() -> None:
     assert find_flag("the flag is picoCTF{...}") is None
     assert find_flag("submit picoCTF{your_flag_here}") is None
     assert find_flag("picoCTF{r34l_0ne} not picoCTF{...}") == "picoCTF{r34l_0ne}"
+    # decoy flags hardcoded in provided source are not real answers (leet-normalized)
+    assert find_flag("char *flag = picoCTF{T3ST_fl4g_f0rm4t_5tr1ng_abcd1234};") is None
+    assert find_flag("picoCTF{FAKE_local_test}") is None
+    assert find_flag("picoCTF{test_flag}") is None
+    # ...but a real themed flag with leet or the word 'greatest' is NOT rejected
+    assert find_flag("picoCTF{greatest_h1ts_2024}") == "picoCTF{greatest_h1ts_2024}"
+    assert find_flag("picoCTF{h3llo_w0rld}") == "picoCTF{h3llo_w0rld}"
     assert is_near_miss("PICOCTF{THENUMBERSMASON}", "picoCTF{thenumbersmason}") is True
     assert is_near_miss("flag{x}", "flag{x}") is False   # strict solve, not a near-miss
     assert is_near_miss("picoCTF{wrong}", "picoCTF{right}") is False

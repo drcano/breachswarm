@@ -101,6 +101,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
         for act in sb.actions:
             if hit := find_flag(act.get("output", ""), ch.flag_pattern):
                 found = hit
+                cost = 0.0  # zero-turn recon solve — genuinely free, not "unknown"
                 break
 
         if not found:
@@ -120,8 +121,8 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 async for msg in query(prompt=task, options=options):
                     if isinstance(msg, AssistantMessage):
                         turns += 1  # accumulates across attempts
-                    if isinstance(msg, ResultMessage) and msg.total_cost_usd:
-                        cost = (cost or 0) + msg.total_cost_usd
+                    if isinstance(msg, ResultMessage) and msg.total_cost_usd is not None:
+                        cost = (cost or 0) + msg.total_cost_usd  # accumulate; 0.0 is a real value
                     for block in getattr(msg, "content", []) or []:
                         text = _block_text(block)
                         if not text:
