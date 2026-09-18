@@ -53,30 +53,43 @@ Three modes, same target/flag/sandbox/RAG. Budgets: baseline & stateful = 40 SDK
 orchestrator = 24 orchestrator-turns × up to 16 per delegated sub-agent (≈10× the
 effective budget — noted so the cost is read honestly, not as a like-for-like turn count).
 
-**Fortress (4-stage), measured:**
+Primary metric is **wall-clock** (fully captured for every run; correlates with cost).
+`sdk_cost` is token-based SDK cost; it reads `0` for baseline/stateful **solves** because
+those early-exit on the flag *before* the SDK's usage-bearing final message — a side effect
+of the cost-saving auto-terminate. The orchestrator doesn't early-exit, so its cost is real.
+turns count streamed AssistantMessages (~2.5× the SDK turn cap), consistent across modes.
 
-| mode | solved | avg turns* | avg cost $ | avg wall s |
-|---|---|---|---|---|
-| baseline | 0/2 | 40 | (n/a on fail) | 1167 |
-| stateful | 0/2 | 102 | 2.58 | 1010 |
-| orchestrator | 0/1 | 134 | **6.51** | **2817** |
+| target | mode | solved | avg turns | avg wall s | notes |
+|---|---|---|---|---|---|
+| **Gauntlet** (5-stage) | baseline | **2/2** | 54 | **187** | fastest; early-exit |
+| | stateful | **2/2** | 41 | 164 | ≈ baseline (within N=2 noise) |
+| | orchestrator | **1/2** | 92 | 637 | **fewer solves, 3.4× wall**, $1.70–2.78/run |
+| **Fortress** (4-stage) | baseline | 0/2 | 40 | 1167 | validation run *did* solve (~1030s): solvable, high-variance |
+| | stateful | 0/2 | 102 | 1010 | $2.2–2.9/run |
+| | orchestrator | 0/1 | 134 | 2817 | **2.4× wall, $6.51/run** |
 
-*turns count streamed AssistantMessages (~2.5× the SDK turn cap), consistent across modes.
-A separate validation baseline **did** solve Fortress (real flag, ~1030s), so the chain is
-solvable at this budget — it's just high-variance right at the 40-turn edge.
+**Findings:**
+- **The orchestrator lost.** On the solvable Gauntlet it solved *less* often (1/2 vs 2/2)
+  AND ran **3.4× slower** at real token cost, while the single agents early-exit for
+  ~nothing. On Fortress it was the most expensive by far and solved nothing. Fresh
+  sub-contexts *re-pay* recon/decoy cost each delegation and hand off lossily — overhead
+  with no upside here.
+- **Explicit state (stateful) merely tied baseline** (2/2 both on Gauntlet, wall within
+  noise). The extra machinery didn't earn its keep either — a single context already
+  remembers its own artifacts across a 5-stage chain.
+- **Depth ≠ difficulty.** The *deeper* Gauntlet (5 stages) was solved in ~3 min while the
+  *shallower* Fortress (4 stages) mostly failed — because per-stage **technique** difficulty
+  dominates. Gauntlet's stages (IDOR, NoSQLi `$ne`, JWT `alg:none`, decimal-IP SSRF, cmdi)
+  map cleanly onto RAG cards and execute directly; Fortress's **S1 WAF-evasion SQLi +
+  `information_schema` enumeration** (335 requests across 3 runs) is the real wall. This
+  **validates the RAG** (clean technique→card mapping = fast solves) and pinpoints where to
+  harden guidance next (WAF-evasion methodology).
 
-**Read:** the orchestrator cost **~2.5× the wall-time and ~2.5× the $** of the stateful
-single agent and solved no more often (none of the three cleared Fortress's S3/S4 endgame
-within budget on these runs). Stage-hit analysis of the target's own access log shows the
-bottleneck is **S1** (WAF-evasion SQLi + `information_schema` enumeration — 335 requests
-across 3 runs) and the **S3 decimal-IP SSRF / S4 SSTI** endgame — not the coordination
-layer. Fresh sub-contexts also *re-pay* recon/decoy cost each delegation.
-
-**Gauntlet (5-stage): [PENDING — filling from the running matrix].**
-
-**Verdict (measure-first, kept-only-if-it-wins): [FINALIZED AFTER GAUNTLET].** On Fortress
-the multi-agent orchestrator did not earn its ~2.5× cost. Retained in-repo as a documented,
-opt-in experiment with its honest result — not wired into the default path.
+**Verdict (measure-first, kept-only-if-it-wins):** neither the multi-agent orchestrator nor
+the explicit-state layer beat a single well-equipped agent (RAG + recon-playbook). **Baseline
+stays the default.** `orchestrator.py` and `stateful.py` are retained as documented, opt-in
+experiments with their honest negative/neutral results — not wired into the default path.
+This is the point: the fancy architecture was *measured*, not assumed, and rejected on data.
 
 ## 4. New harder target: Gauntlet (5-stage chain)
 `targets/gauntlet_app.py` — IDOR → NoSQLi (operator injection) → JWT `alg:none` forge →
@@ -119,5 +132,34 @@ are local + vulnweb only.
 
 ---
 
-## Spend & ranked "do next"
-> _Filled at the end._
+## Spend
+Rough **~$30–40** (SDK cost; only partially captured — baseline/stateful *solves* early-exit
+before the usage-bearing message, so their cost reads 0). The orchestrator dominated spend:
+$6.51 (Fortress) + $1.70 + $2.78 (Gauntlet) + $2.27 (pilot) ≈ **$13 for 4 runs** vs the
+single agents' ~free solves — itself part of the verdict.
+
+## Ranked "do next"
+1. **Harden the measured bottleneck: S1 WAF-evasion recon.** The data pins failures on
+   WAF-evasion SQLi + `information_schema` enumeration. Add a WAF-probe to `_web_recon`
+   (send a blocked payload, detect the 403/"blocked" signature) and force-load the
+   `waf_evasion`+`sqli` cards when a WAF is detected. Highest expected ROI.
+2. **Quantify the RAG's contribution (ablation A/B).** The depth≠difficulty finding implies
+   the RAG is doing real work; measure it: baseline with `CTF_PLAYBOOK=0` and/or
+   `search_knowledge` removed vs full, on Gauntlet. Turn the intuition into a number.
+3. **Right-size the single-agent budget for deep chains.** Fortress is solvable but
+   high-variance at 40 turns; test 55–60 turns (or better early-stage efficiency) so deep
+   chains solve reliably without the orchestrator's cost.
+4. **Fix cost capture on early-exit solves** so every run has a token-cost number (drain to
+   the final ResultMessage, or accumulate per-message usage) — closes the one measurement
+   gap in this A/B.
+5. **Real-app data runs:** stand up crAPI + DVGA + Pixi (see `docs/targets.md`) to exercise
+   the new API/GraphQL/NoSQL/mass-assignment cards on apps the system has never seen.
+6. **Authorized bounty go-live** when a program that permits automation is in hand
+   (`docs/GO_LIVE.md`), with `--enforce` egress + rate limiting.
+
+## What did NOT make the cut (measured & rejected — the honest part)
+- **Multi-agent orchestrator** — fewer solves, 3.4× wall, real cost. Kept opt-in, documented.
+- **Explicit-state (stateful) agent** — tied baseline, no win. Kept opt-in, documented.
+- **BM25 retriever** — regressed vs TF-IDF+heading-boost on this corpus. Reverted.
+- (Prior sessions: chain-aware prompt, dead-end detector, parallel-recon — all null/negative,
+  already documented in `docs/bounty_patterns.md`.)
