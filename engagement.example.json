@@ -1,0 +1,16 @@
+{
+  "program": "Acme Corp — assumed-breach purple team (Q4)",
+  "authorized": true,
+  "operator": "your-name <you@firm.com>",
+  "in_scope": ["*.acme-staging.test", "10.20.0.0/24"],
+  "out_of_scope": ["*.prod.acme.test", "vpn.acme.test"],
+  "rate_limit_rps": 2.0,
+  "allow_metadata_hosts": false,
+  "starts": "2026-10-01T09:00:00Z",
+  "expires": "2026-10-05T18:00:00Z",
+  "allowed_techniques": ["T1190", "T1059", "T1078", "T1552"],
+  "loudness_budget_per_hour": 120,
+  "destructive": false,
+  "kill_switch": "/tmp/ENGAGEMENT_STOP",
+  "notes": "Signed RoE ref ACME-RT-2026-014. Detection-testing explicitly authorized. Use canary tokens, not real data. Blue-team white-cell contact: soc-lead@acme."
+}

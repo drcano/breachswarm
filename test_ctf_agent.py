@@ -7,6 +7,8 @@ from specialists import route, SPECIALISTS
 from solver import _is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
+from audit_chain import AuditChain, verify as audit_verify
+from engagement import Engagement
 
 
 def test_flag_detection():
@@ -112,6 +114,40 @@ def test_waf_nudge():
     assert _waf_nudge("still blocked (suspicious input)", st) == ""   # one-shot per run
     assert _waf_nudge("HTTP/1.1 200 OK", {}) == ""                    # clean response, no fire
     assert _waf_nudge("here is the flag{real_one}", {}) == ""         # never on a flag
+
+
+def test_audit_chain():
+    import tempfile, os
+    p = os.path.join(tempfile.mkdtemp(), "a.jsonl")
+    a = AuditChain(p)
+    a.record("technique", attack_id="T1190", evaded=True)
+    a.record("finding", title="waf bypass", severity="high")
+    assert audit_verify(p)[0] is True
+    # tamper detection: edit a committed entry
+    lines = open(p).read().splitlines()
+    lines[0] = lines[0].replace("T1190", "T1486")
+    open(p, "w").write("\n".join(lines) + "\n")
+    assert audit_verify(p)[0] is False
+
+
+def test_engagement():
+    import tempfile, os, json, time
+    d = tempfile.mkdtemp()
+    f = os.path.join(d, "e.json")
+    base = {"program": "t", "authorized": True, "in_scope": ["*.acme.test"],
+            "allowed_techniques": ["T1190"], "loudness_budget_per_hour": 2}
+    json.dump(dict(base, expires=time.time() + 3600), open(f, "w"))
+    e = Engagement.load(f)
+    assert e.allows_target("https://x.acme.test")[0] is True
+    assert e.allows_target("https://evil.other")[0] is False
+    assert e.technique_allowed("T1190") and not e.technique_allowed("T1486")
+    assert e.spend() and e.spend() and not e.spend()          # budget cap
+    # mandatory expiry
+    json.dump(base, open(f, "w"))
+    try:
+        Engagement.load(f); assert False
+    except ValueError:
+        pass
 
 
 def test_recon_classify():
