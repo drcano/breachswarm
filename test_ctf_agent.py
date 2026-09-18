@@ -4,6 +4,7 @@ Run: ./.venv/bin/python test_ctf_agent.py
 from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
+from solver import _is_unproductive, _stall_nudge
 
 
 def test_flag_detection():
@@ -50,6 +51,23 @@ def test_routing():
         assert route(label) == spec, f"{label} -> {route(label)} != {spec}"
     for spec in cases.values():
         assert spec in SPECIALISTS
+
+
+def test_dead_end_detector():
+    # failure-dominated / empty outputs are unproductive; flags & 200s are not
+    assert _is_unproductive("401 Unauthorized\n403 Forbidden") is True
+    assert _is_unproductive("") is True
+    assert _is_unproductive("HTTP/1.1 200 OK\n{\"data\":{...}}") is False
+    assert _is_unproductive("flag{win} 404 not found") is False   # flag wins
+    # density over a sliding window: ~4 dead-ends among the last 6 fires, even when
+    # a good result is interspersed (the pattern that dodged a consecutive counter)
+    fails, ok = "401 403 refused not found", "HTTP/1.1 200 OK\n{\"data\":1}"
+    st = {"window": [], "cooldown": 0}
+    seq = [fails, fails, ok, fails, fails]   # 4 of 5 are dead-ends, not consecutive
+    notes = [_stall_nudge(x, st) for x in seq]
+    assert notes[:4] == ["", "", "", ""] and "dead-end detector" in notes[4]
+    # cooldown: quiet immediately after firing even if still dense
+    assert _stall_nudge(fails, st) == ""
 
 
 def test_recon_classify():

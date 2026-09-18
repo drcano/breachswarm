@@ -58,13 +58,69 @@ class Result:
     error: str | None = None   # set when the run errored (e.g. rate limit); excluded from scoring
 
 
+# --- Structural dead-end detector -------------------------------------------
+# Prompt nudges didn't cut wasted turns (see docs/bounty_patterns.md); a directive
+# to "chase the chain" made the agent FIXATE. This reacts to outcomes instead: it
+# counts consecutive failure-dominated tool results and, past a threshold, appends
+# an in-band "step back and widen" note — deterministic, no change to the query loop.
+_FAIL_MARKERS = ("401", "403", "404", "refused", "timed out", "timeout",
+                 "could not", "not found", "no such", "fetch error", "denied",
+                 "invalid", "connection reset")
+
+
+def _is_unproductive(out: str) -> bool:
+    """True when a tool result carries no new signal — empty, or dominated by error
+    markers with no success indicator. A flag is always productive."""
+    low = out.lower()
+    if "flag{" in low or "picoctf{" in low:
+        return False
+    if not out.strip():
+        return True
+    fails = sum(low.count(m) for m in _FAIL_MARKERS)
+    has_ok = ("200 " in low or " 200\n" in low or '"data"' in low
+              or "http/1.1 200" in low or "http/2 200" in low)
+    return fails >= 2 and not has_ok
+
+
+_STALL_WINDOW = 6      # look back this many tool results
+_STALL_TRIGGER = 4     # this many dead-ends within the window fires the note
+_STALL_COOLDOWN = 3    # stay quiet this many turns after firing (don't nag)
+
+
+def _stall_nudge(out: str, state: dict) -> str:
+    """Fire a widen-note when dead-ends are DENSE in a sliding window — not just
+    strictly consecutive. Agents intersperse one good probe to dodge a consecutive
+    counter (observed: streak capped at 3), but the fixation is still ~4-of-6 dead
+    ends. state carries {'window':[bool], 'cooldown':int}."""
+    w = state.setdefault("window", [])
+    w.append(_is_unproductive(out))
+    if len(w) > _STALL_WINDOW:
+        w.pop(0)
+    if state.get("cooldown", 0) > 0:
+        state["cooldown"] -= 1
+        return ""
+    if len(w) >= _STALL_TRIGGER + 1 and sum(w) >= _STALL_TRIGGER:
+        state["cooldown"] = _STALL_COOLDOWN
+        return ("\n\n[dead-end detector] " + str(sum(w)) + " of the last " + str(len(w))
+                + " commands returned only errors/empties — you are likely stuck on "
+                "one dimension. STOP repeating this class of probe. Widen: try a "
+                "different endpoint/parameter/technique, or RE-USE something you "
+                "already found (a leaked token/credential usually unlocks an endpoint "
+                "you have ALREADY seen — including the same host via loopback "
+                "127.0.0.1).")
+    return ""
+
+
 def _sandbox_server(sb):
-    """Build an in-process MCP server exposing this challenge's sandbox as a tool."""
+    """Build an in-process MCP server exposing this challenge's sandbox as a tool.
+    Wraps each result with the structural dead-end detector."""
+    stall = {"window": [], "cooldown": 0}
+
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
           {"command": str})
     async def sandbox_bash(args):
         out = sb.bash(args["command"])
-        return {"content": [{"type": "text", "text": out}]}
+        return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)}]}
 
     return create_sdk_mcp_server(name="ctf", version="0.1", tools=[sandbox_bash])
 

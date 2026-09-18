@@ -86,9 +86,35 @@ not a prompt line: e.g. a dead-end detector that widens after N failed same-dime
 probes, or a dedicated pivot tool. Single-run variance is high here — any real claim
 needs multi-run measurement.
 
+## Structural dead-end detector (prototype, shipped)
+
+The prompt experiment failed because it acted on *intent*; this acts on *outcomes*.
+`solver._sandbox_server` wraps every tool result with `_stall_nudge`: it classifies
+each result as productive or a dead-end (`_is_unproductive`: empty, or ≥2 error
+markers with no success marker; a flag is always productive) and, when **≥4 of the
+last 6** results are dead-ends, appends an in-band "step back and widen" note (with a
+3-turn cooldown so it doesn't nag). Deterministic, unit-tested, no change to the
+query loop.
+
+Design note — why a *sliding window*, not a consecutive counter: the first cut
+counted strictly-consecutive failures and **never fired** — agents intersperse one
+good probe to dodge it (observed max streak = 3 while ~10 of 24 commands were dead
+ends). Density-over-window catches the real interspersed-fixation pattern.
+
+Validation (cost-free replay over the real 42-turn fixation trace): the detector
+**would fire at command #11 and #15** — mid-fixation, while the agent was burning
+turns guessing metadata/vault/hostnames, well before it found the loopback pivot.
+So the mechanism triggers on the actual pathology.
+
+Honest limit: whether the injected note *reduces* turns live is **not yet proven** —
+turn counts on this target are variance-dominated (observed 20 / 24 / 42 / 50 across
+single runs), so any turn-cut claim needs multi-run measurement. What is proven: the
+detector fires on the real dead-end pattern and bounds runaway same-dimension probing.
+
 ## Next lethality upgrades (candidates)
 
-1. **Structural dead-end detection** (see above) rather than a prompt directive.
+1. **Multi-run measurement harness** to quantify the detector's turn effect against
+   variance (the missing piece for a real turns-cut claim).
 2. **Race-condition tooling** in the web specialist (concurrent request helper).
 3. A **BOLA sweeper**: given an authenticated session + an object-id param,
    auto-swap ids across a second identity.
