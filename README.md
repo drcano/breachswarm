@@ -30,7 +30,7 @@ challenges/intercode --retries 0 -o results/intercode100.jsonl`. Raw evidence:
 | Forensics | 13/15 (87%) |
 | Crypto | 13/19 (68%) |
 | General Skills / misc | 22/33 (67%) |
-| Pwn (binary exploitation — weakest) | 1/4 |
+| Pwn (binary exploitation)* | 1/4 |
 | Web (live picoCTF servers now offline) | 1/2 |
 | **Total** | **70/100 strict · 76/100 case-insensitive** |
 
