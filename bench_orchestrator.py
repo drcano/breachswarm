@@ -82,12 +82,25 @@ async def main():
                     tag = f"{args.app}-{mode}-{i+1}"
                     print(f"[run] {tag} ...", flush=True)
                     t = time.time()
-                    if mode == "baseline":
-                        row = await _baseline(tag, prompt, flag, wd, args.base_turns)
-                    else:
-                        row = await solve_chain(tag, prompt, wd, real_flag=flag,
-                                                orch_max_turns=args.orch_turns,
-                                                spec_max_turns=args.spec_turns)
+                    try:
+                        if mode == "baseline":
+                            row = await _baseline(tag, prompt, flag, wd, args.base_turns)
+                        else:
+                            row = await solve_chain(tag, prompt, wd, real_flag=flag,
+                                                    orch_max_turns=args.orch_turns,
+                                                    spec_max_turns=args.spec_turns)
+                    except Exception as e:
+                        # solver.solve() RAISES on max_turns (SDK ResultError). That's a
+                        # legitimate non-solve within budget, not an infra error -> record
+                        # solved=False; only true infra errors get an `error` field
+                        # (excluded from rate later).
+                        msg = str(e)
+                        cap = "maximum number of turns" in msg.lower()
+                        cap_turns = args.base_turns if mode == "baseline" else args.orch_turns
+                        row = {"mode": mode, "name": tag, "solved": False, "flag": None,
+                               "turns": cap_turns if cap else None, "cost_usd": None,
+                               "duration_s": round(time.time() - t, 1),
+                               "error": None if cap else msg[:180]}
                     row.update({"app": args.app, "iter": i + 1, "time": time.time()})
                     rows.append(row)
                     print(f"      -> solved={row['solved']} turns={row.get('turns')} "

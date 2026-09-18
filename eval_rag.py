@@ -37,6 +37,9 @@ CASES: list[tuple[str, str]] = [
     ("carve files out of a blob", "binwalk"),
     ("follow tcp stream in a pcap for credentials", "tshark"),
     ("multi-stage chain sqli to ssrf to rce", "chain"),
+    ("negative quantity price manipulation checkout", "business logic"),
+    ("exposed .git directory and env secrets", "secrets"),
+    ("cross-site request forgery state change", "csrf"),
 ]
 
 

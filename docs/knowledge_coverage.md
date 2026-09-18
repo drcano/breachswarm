@@ -1,14 +1,16 @@
 # Knowledge base coverage (RAG corpus)
 
-_Auto-generated. 32 card files -> 34 retrievable chunks. Retrieval is stdlib TF-IDF; see eval_rag.py (recall@1 23/25, recall@3 25/25)._
+_Auto-generated. 35 card files -> 37 retrievable chunks. Retrieval is stdlib TF-IDF; see eval_rag.py (recall@1 26/28, recall@3 28/28)._
 
 The agent pulls these ON DEMAND via `search_knowledge`, and recon auto-loads the fingerprint-matched ones (see recon.playbook_text). Grow the corpus by dropping a new `knowledge/*.md` — no code change; run `eval_rag.py` to confirm no regression.
 
 - **Password Cracking: Archives, Docs & Hashes** (`archive_cracking.md`)
 - **Authentication: Password Reset & OAuth Flaws** (`auth_reset_oauth.md`)
+- **Business Logic Flaws** (`business_logic.md`)
 - **Exploit Chains — combining primitives into critical impact** (`chains.md`)
 - **OS Command Injection** (`command_injection.md`)
 - **CORS Misconfiguration** (`cors.md`)
+- **CSRF — Cross-Site Request Forgery** (`csrf.md`)
 - **Insecure Deserialization** (`deserialization.md`)
 - **Malicious file upload** (`file_upload.md`)
 - **Forensics: Network Captures (pcap) & Memory** (`forensics_pcap_memory.md`)
@@ -30,6 +32,7 @@ The agent pulls these ON DEMAND via `search_knowledge`, and recon auto-loads the
 - **HTTP Request Smuggling (Desync)** (`request_smuggling.md`)
 - **Reverse Engineering** (`reversing.md`)
 - **RSA Attacks (CTF crypto)** (`rsa_attacks.md`)
+- **Secrets & Sensitive Exposure (recon-first)** (`secrets_recon.md`)
 - **SQL Injection** (`sqli.md`)
 - **SSRF — Server-Side Request Forgery** (`ssrf.md`)
 - **SSTI — Server-Side Template Injection -> RCE** (`ssti.md`)
