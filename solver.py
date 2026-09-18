@@ -135,17 +135,37 @@ def _decoy_nudge(out: str) -> str:
     return ""
 
 
+# WAF / input-filter block signatures. Fortress S1 (the measured bottleneck) blocks SQLi
+# payloads with 403 "WAF: request blocked"; a one-shot nudge points the agent at the evasion
+# playbook so it RE-ENCODES instead of resending the same blocked shape.
+_WAF_SIGNALS = ("request blocked", "waf:", "waf ", "blocked (suspicious", "suspicious input",
+                "not allowed", "web application firewall", "malicious input")
+
+
+def _waf_nudge(out: str, state: dict) -> str:
+    low = (out or "").lower()
+    if "flag{" in low or state.get("waf_hinted"):
+        return ""
+    if any(s in low for s in _WAF_SIGNALS):
+        state["waf_hinted"] = True
+        return ("\n\n[WAF/filter blocked] that payload SHAPE was rejected — do NOT resend it. "
+                "EVADE: inline comments (UNION/**/SELECT), case (UnIoN), URL/double-encode, "
+                "no-space (/**/, $IFS), math (3*2*1=6 not 1=1). Call search_knowledge('waf "
+                "evasion') and ('sql injection') for the playbook, then send ONE evaded probe.")
+    return ""
+
+
 def _sandbox_server(sb):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
-    Wraps each result with the structural dead-end detector + decoy feedback."""
+    Wraps each result with the dead-end detector + decoy feedback + WAF-evasion nudge."""
     stall = {"window": [], "cooldown": 0}
 
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
           {"command": str})
     async def sandbox_bash(args):
         out = sb.bash(args["command"])
-        return {"content": [{"type": "text",
-                             "text": out + _stall_nudge(out, stall) + _decoy_nudge(out)}]}
+        return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)
+                             + _decoy_nudge(out) + _waf_nudge(out, stall)}]}
 
     return create_sdk_mcp_server(name="ctf", version="0.1", tools=[sandbox_bash])
 

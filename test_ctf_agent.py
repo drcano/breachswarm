@@ -4,7 +4,7 @@ Run: ./.venv/bin/python test_ctf_agent.py
 from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
-from solver import _is_unproductive, _stall_nudge, _decoy_nudge
+from solver import _is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
 
@@ -103,6 +103,15 @@ def test_decoy_nudge():
     # a real flag in output produces no nudge (must not warn on genuine finds)
     assert _decoy_nudge("flag{f0rtr3ss_ch41n_5sti_after_ssrf_pwn}") == ""
     assert _decoy_nudge("HTTP/1.1 200 OK\n{\"data\":1}") == ""
+
+
+def test_waf_nudge():
+    st = {}
+    n = _waf_nudge('{"error":"WAF: request blocked (suspicious input)"}', st)
+    assert "evade" in n.lower() and "union/**/select" in n.lower()
+    assert _waf_nudge("still blocked (suspicious input)", st) == ""   # one-shot per run
+    assert _waf_nudge("HTTP/1.1 200 OK", {}) == ""                    # clean response, no fire
+    assert _waf_nudge("here is the flag{real_one}", {}) == ""         # never on a flag
 
 
 def test_recon_classify():
