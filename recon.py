@@ -39,13 +39,14 @@ def recon(sb, prompt: str = "") -> dict:
 
     suggested = _classify(prompt, ftypes, sample)
     target = _URL.search(prompt)
+    target_url = target.group(0) if target else None
     return {
         "listing": listing.strip(),
         "files": files,
-        "target_url": target.group(0) if target else None,
+        "target_url": target_url,
         "suggested": suggested,
         "sample": sample.strip()[:2000],
-        "probe": _deep_probe(sb, suggested).strip()[:2500],
+        "probe": _deep_probe(sb, suggested, target_url).strip()[:3000],
     }
 
 
@@ -61,7 +62,44 @@ _PROBES = {
 }
 
 
-def _deep_probe(sb, suggested: str) -> str:
+def _web_recon(sb, url: str) -> str:
+    """Best-in-class deterministic web enumeration — know what the target IS before
+    exploiting. Systematic, ~one focused pass (not a spray): tech fingerprint, the
+    live endpoint surface (status-coded), forms/params, well-known files, and API
+    routes mined from linked JS. Hands the specialist a map so it targets, not flails.
+    """
+    u = url.rstrip("/")
+    cmd = rf"""
+U="{u}"
+echo "== fingerprint (Server / framework / cookies) =="
+curl -sSi -m 8 "$U/" 2>/dev/null | grep -iE '^(server|x-powered-by|x-aspnet|x-generator|via|set-cookie|content-type):' | head -12
+echo "== homepage body (endpoints are often listed in text/JSON, not just links) =="
+H=$(curl -s -m 8 "$U/" 2>/dev/null)
+echo "$H" | head -c 600
+echo ""
+echo "== forms, params, comments =="
+echo "$H" | grep -oiE '<form[^>]*action="[^"]*"[^>]*>|name="[^"]+"|<!--.*-->' | head -20
+# mine any /path tokens mentioned anywhere in the body (catches text/JSON endpoint lists)
+echo "$H" | grep -oiE '/[a-zA-Z0-9_/]{2,40}' | sort -u | head -25
+echo "$H" | grep -oiE '(href|src)="[^"]+"' | sed -E 's/.*="([^"]+)".*/\1/' | grep -viE '\.(css|png|jpg|svg|ico|woff)' | sort -u | head -25
+echo "== well-known / sensitive files (status) =="
+for p in robots.txt sitemap.xml .well-known/security.txt .git/config .env package.json composer.json swagger.json openapi.json api-docs; do
+  c=$(curl -s -o /dev/null -w "%{{http_code}}" -m 6 "$U/$p"); [ "$c" != "404" ] && echo "  $c  /$p"; done
+echo "== endpoint surface (status-coded) =="
+for p in api api/v1 api/v2 admin graphql rest login register users user products orders account metrics actuator/health debug .git; do
+  c=$(curl -s -o /dev/null -w "%{{http_code}}" -m 6 "$U/$p"); [ "$c" != "404" ] && echo "  $c  /$p"; done
+echo "== API routes mined from linked JS =="
+for js in $(echo "$H" | grep -oiE 'src="[^"]+\.js"' | sed -E 's/src="([^"]+)".*/\1/' | head -3); do
+  case "$js" in http*) J="$js";; /*) J="$U$js";; *) J="$U/$js";; esac
+  curl -s -m 6 "$J" 2>/dev/null | grep -oiE '"/(api|rest|v[0-9])[a-zA-Z0-9_/-]*"|/api/[a-zA-Z0-9_/-]+' | tr -d '"' | sort -u | head -20
+done
+"""
+    return sb.bash(cmd)
+
+
+def _deep_probe(sb, suggested: str, target: str | None = None) -> str:
+    if suggested == "web":
+        return _web_recon(sb, target) if target else ""
     cmd = _PROBES.get(suggested, "")
     return sb.bash(cmd) if cmd else ""
 
