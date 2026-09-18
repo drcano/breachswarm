@@ -8,6 +8,7 @@ D-CIPHER calls this role the "auto-prompter"; here it's mostly `file`+`strings`.
 """
 from __future__ import annotations
 
+import os
 import re
 
 # file(1) / extension signals -> specialist key. First match wins.
@@ -104,6 +105,88 @@ def _deep_probe(sb, suggested: str, target: str | None = None) -> str:
     return sb.bash(cmd) if cmd else ""
 
 
+# Recon fingerprint -> the RAG queries most worth pre-loading. Recon already knows
+# WHAT the target is; this turns that into the right playbook BEFORE the agent flails.
+# (query, ) triples keyed by a substring found in the probe/sample/category.
+_WEB_SIGNALS: list[tuple[str, str]] = [
+    ("werkzeug", "ssti jinja2 server-side template injection python"),
+    ("flask", "ssti jinja2 server-side template injection python"),
+    ("django", "ssti python deserialization"),
+    ("express", "prototype pollution nosql injection node"),
+    ("nodejs", "prototype pollution nosql injection node"),
+    ("node.js", "prototype pollution nosql injection node"),
+    ("php", "lfi php filter wrapper deserialization object injection"),
+    ("asp.net", "deserialization viewstate sql injection"),
+    ("x-aspnet", "deserialization viewstate sql injection"),
+    ("spring", "deserialization ssti spel"),
+    ("graphql", "graphql introspection hidden mutation idor"),
+    ("swagger", "api idor bola mass assignment"),
+    ("openapi", "api idor bola mass assignment"),
+    ("api-docs", "api idor bola mass assignment"),
+    (".git", "source disclosure secrets in git"),
+    (".env", "source disclosure secrets credentials"),
+    ("jwt", "jwt forge alg none weak secret"),
+    ("mongo", "nosql injection mongodb auth bypass"),
+]
+# money bugs to seed for ANY web target, so the chain mindset is always primed.
+_WEB_DEFAULT = ["exploit chain escalate primitives to critical",
+                "idor bola broken access control object id",
+                "sql injection union blind", "ssrf cloud metadata bypass"]
+_CAT_QUERY = {
+    "rev": "reverse engineering decompile angr solve check",
+    "pwn": "rop stack overflow format string ret2libc pwntools",
+    "crypto": "rsa attack classical cipher hash cracking",
+    "forensics": "forensics stego binwalk pcap tshark memory",
+}
+
+
+def _hint_queries(r: dict) -> list[str]:
+    cat = r.get("suggested")
+    if cat == "web":
+        probe = ((r.get("probe") or "") + " " + (r.get("sample") or "")).lower()
+        qs = [q for key, q in _WEB_SIGNALS if key in probe]
+        qs += _WEB_DEFAULT
+        # dedupe, keep order, cap so the prompt stays lean
+        seen, out = set(), []
+        for q in qs:
+            if q not in seen:
+                seen.add(q); out.append(q)
+        return out[:5]
+    if cat == "crypto":
+        s = (r.get("sample") or "").lower()
+        if "begin" in s or "rsa" in s:
+            return ["rsa attack factor public key small exponent"]
+        return [_CAT_QUERY["crypto"]]
+    return [_CAT_QUERY[cat]] if cat in _CAT_QUERY else []
+
+
+def playbook_text(r: dict) -> str:
+    """Proactively retrieve the RAG cards matching what recon found, so the specialist
+    opens with the right technique already in hand. Fingerprint-scoped (not the whole
+    KB) to stay lean. Disable with CTF_PLAYBOOK=0 (bench A/B)."""
+    if os.getenv("CTF_PLAYBOOK", "1") == "0":
+        return ""
+    try:
+        from knowledge_base import get_kb
+        kb = get_kb()
+    except Exception:
+        return ""
+    seen, cards = set(), []
+    for q in _hint_queries(r):
+        for h in kb.search(q, k=2):
+            if h["title"] not in seen:
+                seen.add(h["title"]); cards.append(h)
+    cards = cards[:4]
+    if not cards:
+        return ""
+    def _strip_heading(t: str) -> str:  # chunk text starts with its own ## title
+        return re.sub(r"^#{1,6}\s.*\n", "", t, count=1)
+    body = "\n\n".join(f"### {h['title']}\n{_strip_heading(h['text'])[:700]}"
+                       for h in cards)
+    return ("\n\n## Recon-matched playbook (auto-loaded for THIS target; "
+            "search_knowledge for more)\n" + body)
+
+
 def _classify(prompt: str, ftypes: str, sample: str) -> str:
     if _URL.search(prompt):
         return "web"
@@ -122,6 +205,16 @@ def demo() -> None:
     assert _classify("", "photo.png: PNG image data", "") == "forensics"
     assert _classify("", "key.pem: unknown", "-----BEGIN RSA PRIVATE KEY-----") == "crypto"
     assert _classify("just a riddle", "notes.txt: ASCII text", "hello world") == "misc"
+    # recon->playbook: a Flask fingerprint should pre-load the SSTI card; pwn -> ROP
+    web = {"suggested": "web", "probe": "Server: Werkzeug/2.0 Python/3.9", "sample": ""}
+    pb = playbook_text(web).lower()
+    assert "template" in pb and "chain" in pb, f"web playbook missed: {pb[:200]}"
+    pwn = {"suggested": "pwn", "probe": "", "sample": ""}
+    assert "rop" in playbook_text(pwn).lower(), "pwn playbook missed ROP"
+    assert playbook_text({"suggested": "web"}) != ""
+    os.environ["CTF_PLAYBOOK"] = "0"
+    assert playbook_text(web) == "", "CTF_PLAYBOOK=0 should disable"
+    os.environ.pop("CTF_PLAYBOOK")
     print("recon.py ok")
 
 
@@ -136,7 +229,7 @@ def brief_text(r: dict) -> str:
         lines.append(f"Category probe:\n{r['probe']}")
     if r["sample"]:
         lines.append(f"Notable strings:\n{r['sample']}")
-    return "\n".join(lines)
+    return "\n".join(lines) + playbook_text(r)
 
 
 if __name__ == "__main__":
