@@ -47,10 +47,10 @@ def _up(app: str) -> tuple[str, str]:
     return cname, f"http://{ip}:5000/"
 
 
-async def _baseline(name, prompt, flag, wd) -> dict:
+async def _baseline(name, prompt, flag, wd, max_turns=40) -> dict:
     ch = Challenge(name=name, category="Web Exploitation", prompt=prompt,
                    workdir=wd, outdir=wd, flag_pattern=r"flag\{[^}\s]+\}", real_flag=flag)
-    r = await solve(ch, max_turns=40, retries=0)
+    r = await solve(ch, max_turns=max_turns, retries=0)
     return {"mode": "baseline", "name": name, "solved": r.solved, "flag": r.flag,
             "turns": r.turns, "cost_usd": r.cost_usd, "duration_s": r.duration_s}
 
@@ -61,6 +61,9 @@ async def main():
     ap.add_argument("--n", type=int, default=2, help="runs per mode")
     ap.add_argument("--flag", default=None)
     ap.add_argument("--modes", default="baseline,orchestrator")
+    ap.add_argument("--orch-turns", type=int, default=24, help="orchestrator turn cap")
+    ap.add_argument("--spec-turns", type=int, default=16, help="per-delegation turn cap")
+    ap.add_argument("--base-turns", type=int, default=40, help="baseline turn cap")
     ap.add_argument("-o", default="results/orchestrator_ab.jsonl")
     args = ap.parse_args()
     flag = args.flag or FLAGS.get(args.app)
@@ -80,9 +83,11 @@ async def main():
                     print(f"[run] {tag} ...", flush=True)
                     t = time.time()
                     if mode == "baseline":
-                        row = await _baseline(tag, prompt, flag, wd)
+                        row = await _baseline(tag, prompt, flag, wd, args.base_turns)
                     else:
-                        row = await solve_chain(tag, prompt, wd, real_flag=flag)
+                        row = await solve_chain(tag, prompt, wd, real_flag=flag,
+                                                orch_max_turns=args.orch_turns,
+                                                spec_max_turns=args.spec_turns)
                     row.update({"app": args.app, "iter": i + 1, "time": time.time()})
                     rows.append(row)
                     print(f"      -> solved={row['solved']} turns={row.get('turns')} "

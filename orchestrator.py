@@ -172,7 +172,8 @@ async def solve_chain(name: str, prompt: str, workdir: str, real_flag: str | Non
     row = {"mode": "orchestrator", "name": name, "solved": solved, "flag": found,
            "turns": counters["turns"], "cost_usd": round(counters["cost"], 4),
            "duration_s": dur, "tokens": usage["tokens"],
-           "cost_sdk_usd": usage["cost_sdk_usd"], "artifacts": dict(blackboard)}
+           "cost_sdk_usd": usage["cost_sdk_usd"], "artifacts": dict(blackboard),
+           "orch_max_turns": orch_max_turns, "spec_max_turns": spec_max_turns}
     return row
 
 
