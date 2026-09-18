@@ -77,8 +77,9 @@ def _decompiler_server(sb):
     analyzeHeadless call and nothing else changes. See docs/mcp_integration.md.
     """
     @tool("decompile",
-          "Decompile a binary function to pseudo-C (radare2). Use for reversing "
-          "instead of reading raw disassembly by hand.",
+          "Analyze a binary function and return Ghidra-quality pseudo-C when "
+          "r2ghidra (pdg) is installed, otherwise annotated disassembly (pdf). "
+          "One call beats fumbling raw r2 over bash.",
           {"binary": str, "function": str})
     async def decompile(args):
         b = args["binary"].replace("'", "")          # path in the sandbox

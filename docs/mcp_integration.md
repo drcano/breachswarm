@@ -74,8 +74,11 @@ whether a capability is 20 lines of in-process Python or a vendor's daemon.**
 r2 plugin: Ghidra-quality pseudo-C, no JDK, no GUI, ~100–200MB vs Ghidra's ~2GB,
 and no fragile GUI-plugin bridge. Same MCP interface as external GhidraMCP would
 expose, so if a Ghidra-only feature is ever needed, Pattern 2 drops it in.
-(r2ghidra compiles from source via `r2pm`; if that build fails in an image the
-tool degrades to r2's built-in `pdc`/disassembly — the agent wiring is unchanged.)
+(Honest state: r2ghidra compiles from source via `r2pm` but currently **fails to
+build in this image** — its configure can't find `r_core` via pkg-config with the
+apt radare2. So today the tool returns annotated **disassembly** (r2's `pdc` pseudo-C
+is empty/unreliable here); with r2ghidra it would return Ghidra-quality pseudo-C.
+Either way the agent wiring is unchanged — that decoupling is the whole point.)
 
 ## FDE takeaways
 
