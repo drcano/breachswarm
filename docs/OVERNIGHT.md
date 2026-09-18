@@ -149,9 +149,10 @@ single agents' ~free solves — itself part of the verdict.
    WAF-evasion SQLi + `information_schema` enumeration. Add a WAF-probe to `_web_recon`
    (send a blocked payload, detect the 403/"blocked" signature) and force-load the
    `waf_evasion`+`sqli` cards when a WAF is detected. Highest expected ROI.
-2. **Quantify the RAG's contribution (ablation A/B).** The depth≠difficulty finding implies
-   the RAG is doing real work; measure it: baseline with `CTF_PLAYBOOK=0` and/or
-   `search_knowledge` removed vs full, on Gauntlet. Turn the intuition into a number.
+2. ~~Quantify the RAG's contribution (ablation A/B).~~ **DONE — `docs/rag_ablation.md`.**
+   Result: **no measurable RAG lift on Gauntlet** (full ≈ KB-only ≈ no-RAG, all 2/2, within
+   noise) — the base model already knows those techniques. RAG's value, if any, is on
+   rarer/precise payloads; the *next* ablation should target Fortress S1 WAF-evasion.
 3. **Right-size the single-agent budget for deep chains.** Fortress is solvable but
    high-variance at 40 turns; test 55–60 turns (or better early-stage efficiency) so deep
    chains solve reliably without the orchestrator's cost.

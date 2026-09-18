@@ -115,8 +115,11 @@ orchestrator and stateful modes are kept as opt-in, documented experiments. The 
 also acted as a fuzzer, surfacing **three real correctness bugs** in the solve loop
 (silent-decoy flail, crash-on-budget-exhaustion, false-positive flag match) — fixed, with
 regression tests for the two logic bugs. And a clean finding: **chain depth ≠ difficulty** — the deeper
-Gauntlet solved in ~3 min while Fortress's WAF-evasion S1 was the real wall — consistent with
-the RAG carrying real load (a direct ablation to isolate it is the next step). Full writeup + numbers:
+Gauntlet solved in ~3 min while Fortress's WAF-evasion S1 was the real wall. A follow-up
+**RAG ablation** (full vs KB-only vs no-RAG on Gauntlet) then found **no measurable RAG lift
+there** — all 2/2, wall/turns within noise — because the base model already knows those
+techniques; RAG's value, if any, is on rarer/precise payloads (untested). Honest and a little
+humbling. Full writeups + numbers:
 [docs/OVERNIGHT.md](docs/OVERNIGHT.md).
 
 ## Full-stack console
@@ -247,6 +250,7 @@ GhidraMCP for decompilation and a multi-finding report generator.
 - **[docs/OVERNIGHT.md](docs/OVERNIGHT.md)** — the RAG expansion, the multi-agent A/B
   (measured & rejected), the three bugs the harness caught, and the ranked next steps.
 - **[docs/knowledge_coverage.md](docs/knowledge_coverage.md)** — the full RAG corpus index.
+- **[docs/rag_ablation.md](docs/rag_ablation.md)** — does the RAG actually help solving? (measured: no lift on standard-technique chains).
 - **[docs/targets.md](docs/targets.md)** — vetted authorized proving-ground & bounty targets.
 - **[CASE_STUDY.md](CASE_STUDY.md)** — unknown target → client-ready report, with
   measured unit economics (~$0.60–0.66/finding).
