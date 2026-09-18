@@ -74,3 +74,17 @@ unauthenticated internal endpoints; verb/version tampering; secrets in responses
 2. **Race-condition tooling** in the web specialist (concurrent request helper).
 3. A **BOLA sweeper**: given an authenticated session + an object-id param,
    auto-swap ids across a second identity.
+
+
+## Validation — the upgrade chains on its own
+
+Built a harder target that requires the top-payer chain (`targets/chain_app.py`,
+run via `chain_bench.sh`): **SSRF → cloud metadata (169.254.169.254) → leaked IAM
+creds → internal localhost-only admin → flag**. No single request wins; direct
+admin access is 403 (internal-only).
+
+The upgraded `web` specialist **solved it autonomously in 20 turns / 73.5s** — the
+audit trail shows it probing `/preview` for SSRF, hitting the metadata service,
+reading `iam/security-credentials/s3-backup-role`, extracting the Vault token, and
+pivoting back to the internal admin endpoint. Those metadata/credential probes come
+straight from the new playbook. Evidence: `results/chain.jsonl`.
