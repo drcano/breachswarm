@@ -52,8 +52,15 @@ full audit — is fair game and is the point.
 - [x] `egress_proxy.py --enforce` — network-layer scope containment (validated on Juice Shop)
 - [x] **`Engagement` enforced at the proxy** (`--engagement`) — network-layer expiry + live kill
       switch: authorization ending or the kill switch tripping cuts egress mid-run
-- [ ] **ATT&CK technique registry** — each action tagged with its technique + the control it
-      tests, audited, and rolled up into a **blue-team scorecard** ("WAF missed evaded SQLi",
-      "NDR didn't flag low-and-slow"). This is the deliverable that makes it purple-team, not
-      just access.
-- [ ] Canary/no-destruction enforcement + a deconfliction/white-cell hook.
+- [x] **ATT&CK technique registry + blue-team scorecard** (`techniques.py`) — `classify()`
+      maps each payload to a MITRE technique + the control it tests; `outcome_from()` reads the
+      target's own response (403/block = caught, 2xx to an evaded payload = gap); `scorecard()`
+      + `render()` produce the defender table ("WAF blocked path traversal but MISSED evaded
+      UNION SQLi → 🔴 detection gap"). The purple-team deliverable.
+- [x] **No-destruction rail + canary tokens** (`safety.py`) — `guard_destructive` blocks data/
+      availability destruction unless the RoE says `destructive: true` (wired into `bounty.py`);
+      `canary_token` proves impact/exfil with nothing at risk. Deconfliction `announce()` writes
+      run phases to a shared white-cell channel.
+- [ ] **Engagement-aware runner** — thread `Engagement` + `AuditChain` + scorecard through a
+      `bounty.py`-style entrypoint so a full run is authorized, contained, audited, and ends
+      with the scorecard. (The pieces exist; this wires them into one command.)

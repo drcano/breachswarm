@@ -57,8 +57,11 @@ def _server(sb):
     from solver import _stall_nudge, _is_unproductive, _decoy_nudge, _waf_nudge
     stall = {"window": [], "cooldown": 0}
     endpoint_errs = defaultdict(int)   # path -> consecutive error count
-    fp = {"tool_calls": 0, "error_results": 0, "circuit_blocks": 0}
+    fp = {"tool_calls": 0, "error_results": 0, "circuit_blocks": 0, "destructive_blocks": 0}
     ERR_THRESH = 3
+    from safety import guard_destructive
+    import os as _os
+    _destructive_ok = _os.getenv("CTF_ALLOW_DESTRUCTIVE") == "1"
 
     def _paths(cmd):
         return re.findall(r'https?://[^/\s"\']+/([^\s"\'?]*)', cmd or "")
@@ -67,6 +70,10 @@ def _server(sb):
           {"command": str})
     async def sandbox_bash(args):
         cmd = args.get("command", "")
+        allowed, why = guard_destructive(cmd, _destructive_ok)  # no-destruction rail
+        if not allowed:
+            fp["destructive_blocks"] += 1
+            return {"content": [{"type": "text", "text": why}]}
         paths = _paths(cmd)
         tripped = sorted({p for p in paths if endpoint_errs[p] >= ERR_THRESH})
         if tripped:  # circuit open: refuse to send more real traffic to dead endpoints

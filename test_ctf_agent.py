@@ -9,6 +9,8 @@ from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
 from audit_chain import AuditChain, verify as audit_verify
 from engagement import Engagement
+from techniques import classify, outcome_from, scorecard
+from safety import is_destructive, guard_destructive, canary_token, is_canary
 
 
 def test_flag_detection():
@@ -148,6 +150,26 @@ def test_engagement():
         Engagement.load(f); assert False
     except ValueError:
         pass
+
+
+def test_technique_scorecard():
+    assert ("T1190", "SQL injection") in classify("q=1' UNION/**/SELECT 1,2")
+    assert ("T1071", "SSRF → cloud metadata") in classify("url=http://2852039166/latest/meta-data/")
+    assert outcome_from(403, "WAF: request blocked")[0] is True      # blocked
+    assert outcome_from(200, "{}") == (False, True)                  # evaded + succeeded
+    sc = scorecard([{"payload": "1' UNION SELECT", "blocked": True, "success": False},
+                    {"payload": "1' UNION/**/SELECT", "blocked": False, "success": True}])
+    assert sc["T1190"]["blocked"] == 1 and sc["T1190"]["missed"] == 1 and sc["T1190"]["detection_gap"]
+
+
+def test_safety_rails():
+    assert is_destructive("curl 'http://t/?q=1;DROP TABLE users--'")
+    assert is_destructive("curl -X DELETE http://t/api/orders/5")
+    assert not is_destructive("curl 'http://t/?q=1 UNION SELECT'")   # read-only
+    assert guard_destructive("rm -rf /", False)[0] is False          # blocked by default
+    assert guard_destructive("rm -rf /", True)[0] is True            # RoE authorizes destruction
+    tok = canary_token("x")
+    assert is_canary(tok) and not is_canary("nope")
 
 
 def test_recon_classify():
