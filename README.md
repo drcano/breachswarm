@@ -134,6 +134,21 @@ exploited two distinct vulnerability classes autonomously:
   extraction script to dump `SELECT flag FROM secret`.
   → [docs/sqli_demo_writeup.md](docs/sqli_demo_writeup.md)
 
+### Third-party targets — full findings reports
+
+Pointed at real, third-party OWASP-style vulnerable apps it had never seen, the
+bounty pipeline (`bounty.py`, scope-gated) produced client-ready reports:
+
+- **OWASP Juice Shop** — 8 findings incl. 2 Critical SQLi (auth bypass + full
+  credential dump). → [docs/juiceshop_findings.md](docs/juiceshop_findings.md)
+- **VAmPI (vulnerable API)** — 6 findings, 4 Critical, in 27 turns / 138s / $1.01:
+  unauth UNION SQLi credential dump, forged JWT (weak secret `random`), BOLA admin
+  password reset, mass-assignment admin, `/_debug` cleartext-password leak.
+  → [docs/vampi_findings.md](docs/vampi_findings.md)
+
+Each finding carries a CVSS 3.1 vector, CWE, affected asset, repro steps, impact,
+and remediation. See [CASE_STUDY.md](CASE_STUDY.md) for the measured economics.
+
 Each run ends with a clean, publishable writeup the agent generated itself.
 
 ```bash

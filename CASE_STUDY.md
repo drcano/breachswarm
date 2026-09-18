@@ -46,6 +46,7 @@ From `bounty_metrics.jsonl` — real per-run cost and turn counts:
 |---|---|---|---|---|
 | Self-demo lab | own SQLi target | 25 | **$0.66** | full findings report |
 | Juice Shop | own instance | 21 | **$0.62** | 8 findings, 2 Critical |
+| VAmPI (3rd-party API) | own instance | 27 | **$1.01** | 6 findings, 4 Critical, 138s |
 
 **~$0.60–0.66 and ~20–25 model turns to go from unknown host → written report.**
 On the CTF benchmark the exploit step itself lands in a median **~8–19s** once

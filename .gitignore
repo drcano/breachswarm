@@ -37,3 +37,6 @@ scope.juice.json
 results/**
 !results/*.jsonl
 !results/*.md
+logs/
+scope.*.json
+!scope.example.json
