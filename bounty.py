@@ -136,9 +136,12 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
         with make_sandbox(workdir / "files", network=True,
                           network_name=net_name, proxy_url=proxy_url) as sb:
             ctf_srv, footprint = _server(sb)
+            from solver import _knowledge_server
             opts = ClaudeAgentOptions(
-                system_prompt=BOUNTY_SYS, mcp_servers={"ctf": ctf_srv},
-                allowed_tools=["mcp__ctf__sandbox_bash"], max_turns=max_turns, model=MODEL)
+                system_prompt=BOUNTY_SYS,
+                mcp_servers={"ctf": ctf_srv, "kb": _knowledge_server()},
+                allowed_tools=["mcp__ctf__sandbox_bash", "mcp__kb__search_knowledge"],
+                max_turns=max_turns, model=MODEL)
             recon_turns, recon_cost, recon_map = 0, 0.0, ""
             usages = []  # raw ResultMessage.model_usage dicts for token-based costing
             if parallel_recon:

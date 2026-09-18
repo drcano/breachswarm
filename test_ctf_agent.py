@@ -6,6 +6,7 @@ from recon import _classify
 from specialists import route, SPECIALISTS
 from solver import _is_unproductive, _stall_nudge
 from pricing import cost_of, summarize
+from knowledge_base import KnowledgeBase
 
 
 def test_flag_detection():
@@ -52,6 +53,15 @@ def test_routing():
         assert route(label) == spec, f"{label} -> {route(label)} != {spec}"
     for spec in cases.values():
         assert spec in SPECIALISTS
+
+
+def test_knowledge_base():
+    kb = KnowledgeBase()
+    assert len(kb.chunks) >= 8, "technique cards not loaded"
+    # natural-language queries must retrieve the right technique card at rank 1
+    assert "union/**/select" in kb.search("bypass WAF union select", 1)[0]["text"].lower()
+    assert "169.254" in kb.search("read cloud metadata credentials", 1)[0]["text"]
+    assert "{{7*7}}" in kb.search("code execution from a template field", 1)[0]["text"]
 
 
 def test_pricing():

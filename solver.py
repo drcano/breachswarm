@@ -160,6 +160,28 @@ def _decompiler_server(sb):
     return create_sdk_mcp_server(name="decomp", version="0.1", tools=[decompile])
 
 
+def _knowledge_server():
+    """MCP server exposing the retrieval knowledge base (RAG). The agent queries it
+    on demand for techniques instead of carrying them all in the prompt."""
+    from knowledge_base import get_kb
+
+    @tool("search_knowledge",
+          "Search the offensive-security knowledge base for a technique or vuln "
+          "class (e.g. 'ssrf metadata bypass', 'jwt alg none', 'idor object id'). "
+          "Returns the top matching playbook chunks. Use it when unsure how to "
+          "exploit or escalate something.",
+          {"query": str})
+    async def search_knowledge(args):
+        hits = get_kb().search(args.get("query", ""), k=3)
+        if not hits:
+            return {"content": [{"type": "text", "text": "no knowledge-base matches"}]}
+        txt = "\n\n---\n".join(f"[{h['source']} · {h['title']}]\n{h['text'][:900]}"
+                               for h in hits)
+        return {"content": [{"type": "text", "text": txt}]}
+
+    return create_sdk_mcp_server(name="kb", version="0.1", tools=[search_knowledge])
+
+
 def _block_text(block) -> str | None:
     """Pull text out of an assistant TextBlock or a ToolResultBlock (flags often
     land only in raw command output)."""
@@ -196,8 +218,8 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 break
 
         if not found:
-            servers = {"ctf": _sandbox_server(sb)}
-            tools = ["mcp__ctf__sandbox_bash"]
+            servers = {"ctf": _sandbox_server(sb), "kb": _knowledge_server()}
+            tools = ["mcp__ctf__sandbox_bash", "mcp__kb__search_knowledge"]
             if spec in ("rev", "pwn"):  # binary work gets a decompiler MCP server
                 servers["decomp"] = _decompiler_server(sb)
                 tools.append("mcp__decomp__decompile")

@@ -9,7 +9,9 @@ _COMMON = (
     "it, iterate. When you find the flag, print it plainly on its own line. "
     "Do not ask the user questions — you have no user. Be economical with commands. "
     "When you print the flag, reproduce its exact canonical format, including the "
-    "exact case of the prefix (e.g. picoCTF{...}, never PICOCTF{...})."
+    "exact case of the prefix (e.g. picoCTF{...}, never PICOCTF{...}). "
+    "When unsure how to exploit or escalate a vuln class, call the "
+    "search_knowledge tool for a technique playbook before improvising."
 )
 
 SPECIALISTS: dict[str, str] = {
