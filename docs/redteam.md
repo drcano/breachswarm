@@ -21,8 +21,10 @@ out-of-scope action:
 **internal-only Docker network** whose *only* route out is a proxy that checks every request
 against scope. An out-of-scope request fails at the socket layer — the agent cannot reach a
 non-scope host even if a prompt-injection, a bug, or a confused plan tells it to. Validated end
-to end in `docs/golive_dryrun.md`. *(Roadmap: have the proxy enforce the full `Engagement` —
-so an expiry or a tripped kill switch cuts the wire mid-run, not just the policy check.)*
+to end in `docs/golive_dryrun.md`. The proxy now also enforces the full `Engagement`
+(`--engagement`): expiry and the kill switch are re-checked on **every request**, so the wire is
+cut mid-run the instant authorization ends or the kill switch trips — even for in-scope hosts,
+regardless of what the agent tries.
 
 **Layer 3 — Audit (records).** `audit_chain.py` (`AuditChain`): every action is appended to a
 hash-chained, tamper-evident JSONL — edit or drop any past entry and `verify()` fails at that
@@ -48,7 +50,8 @@ full audit — is fair game and is the point.
 - [x] `audit_chain.py` — tamper-evident hash-chained log (+ tests)
 - [x] `engagement.py` — RoE engine: expiry, technique allowlist, loudness budget, kill switch (+ tests)
 - [x] `egress_proxy.py --enforce` — network-layer scope containment (validated on Juice Shop)
-- [ ] **Wire `Engagement` into the proxy** — network-layer expiry + kill-switch (Layer-2 hardening)
+- [x] **`Engagement` enforced at the proxy** (`--engagement`) — network-layer expiry + live kill
+      switch: authorization ending or the kill switch tripping cuts egress mid-run
 - [ ] **ATT&CK technique registry** — each action tagged with its technique + the control it
       tests, audited, and rolled up into a **blue-team scorecard** ("WAF missed evaded SQLi",
       "NDR didn't flag low-and-slow"). This is the deliverable that makes it purple-team, not

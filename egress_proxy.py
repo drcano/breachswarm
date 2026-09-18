@@ -20,19 +20,24 @@ from urllib.parse import urlparse
 
 from scope import Scope
 
-SCOPE: Scope
+# ALLOW(target) -> (ok, reason). Backed by a Scope (--scope) or, for a red-team run, a full
+# Engagement (--engagement) that ALSO enforces expiry + kill switch on EVERY request — so the
+# network wire is cut the instant authorization ends or the kill switch trips, mid-run,
+# regardless of what the agent tries. This is Layer 2 of the containment model (docs/redteam.md).
+ALLOW = None            # callable: target -> (ok, reason)
+RATE_RPS = 1.0
 _last = [0.0]
 _lock = threading.Lock()
 JITTER = 0.4   # fraction of the base gap added at random (0..JITTER*gap)
 
 
 def _rate_gate():
-    """Enforce the scope rate limit, plus a small random extra wait. Jitter ONLY ever
-    adds delay (never exceeds the stated rate), so it stays good-citizen — it just
-    avoids the perfectly-even request train that itself screams 'bot' to a rate
-    limiter. Not concealment: a monitored target still sees every (evadable) payload."""
+    """Enforce the rate limit, plus a small random extra wait. Jitter ONLY ever adds delay
+    (never exceeds the stated rate), so it stays good-citizen — it just avoids the perfectly-
+    even request train that itself screams 'bot' to a rate limiter. Not concealment: a
+    monitored target still sees every (evadable) payload."""
     with _lock:
-        gap = 1.0 / max(SCOPE.rate_limit_rps, 0.01)
+        gap = 1.0 / max(RATE_RPS, 0.01)
         gap += random.uniform(0, JITTER * gap)
         wait = _last[0] + gap - time.time()
         if wait > 0:
@@ -53,7 +58,7 @@ class Proxy(BaseHTTPRequestHandler):
 
     def do_CONNECT(self):  # HTTPS
         host = self.path.split(":")[0]
-        ok, reason = SCOPE.allows("https://" + host)
+        ok, reason = ALLOW("https://" + host)
         if not ok:
             return self._deny(host, reason)
         _rate_gate()
@@ -67,7 +72,7 @@ class Proxy(BaseHTTPRequestHandler):
 
     def _http(self):
         host = urlparse(self.path).hostname or ""
-        ok, reason = SCOPE.allows(self.path)
+        ok, reason = ALLOW(self.path)
         if not ok:
             return self._deny(host, reason)
         _rate_gate()
@@ -114,14 +119,25 @@ class Proxy(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scope", required=True)
+    ap.add_argument("--scope", help="scope JSON (host allowlist only)")
+    ap.add_argument("--engagement", help="engagement JSON (RoE: also enforces expiry + "
+                    "kill switch on every request — cuts the wire when authorization ends)")
     ap.add_argument("--port", type=int, default=8888)
     ap.add_argument("--host", default="0.0.0.0")
     args = ap.parse_args()
-    global SCOPE
-    SCOPE = Scope.load(args.scope)
-    print(f"[egress-proxy] scope={SCOPE.program} in={SCOPE.in_scope} "
-          f"rate={SCOPE.rate_limit_rps}/s on {args.host}:{args.port}")
+    if not (args.scope or args.engagement):
+        ap.error("one of --scope or --engagement is required")
+    global ALLOW, RATE_RPS
+    if args.engagement:
+        from engagement import Engagement
+        eng = Engagement.load(args.engagement)
+        ALLOW, RATE_RPS = eng.allows_target, eng.scope.rate_limit_rps
+        print(eng.preflight() + f" on {args.host}:{args.port}")
+    else:
+        s = Scope.load(args.scope)
+        ALLOW, RATE_RPS = s.allows, s.rate_limit_rps
+        print(f"[egress-proxy] scope={s.program} in={s.in_scope} "
+              f"rate={s.rate_limit_rps}/s on {args.host}:{args.port}")
     ThreadingHTTPServer((args.host, args.port), Proxy).serve_forever()
 
 
