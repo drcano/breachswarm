@@ -65,9 +65,12 @@ class Result:
 # to "chase the chain" made the agent FIXATE. This reacts to outcomes instead: it
 # counts consecutive failure-dominated tool results and, past a threshold, appends
 # an in-band "step back and widen" note — deterministic, no change to the query loop.
-_FAIL_MARKERS = ("401", "403", "404", "refused", "timed out", "timeout",
+_FAIL_MARKERS = ("401", "403", "404", "429", "refused", "timed out", "timeout",
                  "could not", "not found", "no such", "fetch error", "denied",
-                 "invalid", "connection reset")
+                 "invalid", "connection reset",
+                 # block/WAF signals — 403 bodies are clean of status codes but say this
+                 "blocked", "forbidden", "not allowed", "waf", "egress filter",
+                 "rate limit", "too many requests")
 
 
 def _is_unproductive(out: str) -> bool:
