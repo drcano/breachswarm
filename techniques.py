@@ -23,22 +23,32 @@ TECHNIQUES = {
     "T1083": ("File & Directory Discovery", "Discovery", "WAF/EDR"),
     "T1213": ("Data from Information Repositories", "Collection", "DLP/authz"),
     "T1071": ("Application-Layer Protocol (C2/SSRF egress)", "Command & Control", "egress/NDR"),
+    "T1110": ("Brute Force / credential stuffing", "Credential Access", "rate-limit/lockout/MFA"),
+    "T1505.003": ("Server Software Component: Web Shell", "Persistence", "file-integrity/EDR"),
+    "T1539": ("Steal Web Session Cookie (XSS)", "Credential Access", "CSP/HttpOnly/WAF"),
+    "T1211": ("Exploitation for Defense Evasion (WAF bypass)", "Defense Evasion", "WAF tuning"),
 }
 
 # signature -> (attack_id, human label for the specific technique variant)
 _SIGS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"union[\s/*]+select|information_schema|\bor\b\s+1=1|sleep\(|pg_sleep", re.I), "T1190", "SQL injection"),
-    (re.compile(r"\$ne\b|\$regex|\$where|\$gt\b", re.I), "T1190", "NoSQL injection"),
-    (re.compile(r"\{\{.*\}\}|__globals__|\$\{.*\}|<%=|render_template_string", re.I), "T1190", "SSTI / template injection"),
+    (re.compile(r"union[\s/*]+select|information_schema|\bor\b\s+1=1|sleep\(|pg_sleep|waitfor\s+delay", re.I), "T1190", "SQL injection"),
+    (re.compile(r"\$ne\b|\$regex|\$where|\$gt\b|\[\$ne\]", re.I), "T1190", "NoSQL injection"),
+    (re.compile(r"\{\{.*\}\}|__globals__|\$\{.*\}|<%=|render_template_string|cycler\.__init__", re.I), "T1190", "SSTI / template injection"),
+    (re.compile(r"<!entity|<!doctype[^>]*system|system\s+[\"']file:|xxe", re.I), "T1190", "XXE"),
+    (re.compile(r"rO0AB|__reduce__|!!python/object|O:\d+:\"|java\.lang\.runtime|phpggc|ysoserial", re.I), "T1190", "insecure deserialization"),
+    (re.compile(r'name="[^"]*\.(php|jsp|asp|aspx|phtml)"|filename=.*\.(php|jsp|aspx)|<\?php|multipart/form-data', re.I), "T1505.003", "malicious file upload / web shell"),
     # NB: no `curl`/`wget` here — the agent's OWN tooling uses `$(curl …)`, which would
     # false-positive as command injection. Match the classic proof commands instead.
     (re.compile(r"(?:;|\||&&|%3B|%0a)\s*(id|whoami|uname|cat\s+/etc|ls\s+-la)\b|\$\(\s*(id|whoami)\s*\)", re.I), "T1059", "OS command injection"),
-    (re.compile(r"\.\./|%2e%2e|/etc/passwd|php://|\.\.%2f", re.I), "T1083", "path traversal / LFI"),
-    (re.compile(r"169\.254\.169\.254|2852039166|0xa9fea9fe|metadata\.google|latest/meta-data", re.I), "T1071", "SSRF → cloud metadata"),
-    (re.compile(r'"?(role|isadmin|is_admin|is_staff|account_type|verified)"?\s*[:=]\s*"?(admin|true|1)', re.I), "T1078", "mass assignment / priv-esc"),
-    (re.compile(r'"alg"\s*:\s*"none"|jwt|eyJ[A-Za-z0-9_-]+\.', re.I), "T1552", "JWT forge / weak secret"),
-    (re.compile(r"/\.git/|/\.env\b|\.js\.map|id_rsa|aws_secret|\.sql\b", re.I), "T1552", "exposed secrets / source"),
-    (re.compile(r"/rest/basket/|/api/orders/\d|/users/\d|node\(id:", re.I), "T1213", "IDOR / BOLA object access"),
+    (re.compile(r"\.\./|%2e%2e|/etc/passwd|php://|\.\.%2f|\.\.%5c", re.I), "T1083", "path traversal / LFI"),
+    (re.compile(r"169\.254\.169\.254|2852039166|0xa9fea9fe|metadata\.google|latest/meta-data|gopher://|dict://", re.I), "T1071", "SSRF → metadata / internal"),
+    (re.compile(r'"?(role|isadmin|is_admin|is_staff|account_type|verified|__proto__)"?\s*[:=]\s*"?(admin|true|1)|constructor\[prototype\]', re.I), "T1078", "mass assignment / prototype-pollution priv-esc"),
+    (re.compile(r'"alg"\s*:\s*"none"|jwt_tool|eyJ[A-Za-z0-9_-]+\.eyJ|hashcat.*16500', re.I), "T1552", "JWT forge / weak secret"),
+    (re.compile(r"/\.git/|/\.env\b|\.js\.map|id_rsa|aws_secret|\.sql\b|/actuator/|/\.svn/|backup\.zip", re.I), "T1552", "exposed secrets / source / backup"),
+    (re.compile(r"/rest/basket/|/api/orders/\d|/users/\d|/account/\d|node\(id:|doc(ument)?_id=\d", re.I), "T1213", "IDOR / BOLA object access"),
+    (re.compile(r"<script|onerror=|javascript:|document\.cookie|<svg\s+onload|onmouseover=", re.I), "T1539", "XSS → session/cookie theft"),
+    (re.compile(r"\b(hydra|medusa|patator|ncrack)\b|rockyou\.txt|password\s*=.*&password\s*=|/login.*for\s+i\s+in", re.I), "T1110", "brute force / cred stuffing"),
+    (re.compile(r"/\*\*/|%2553elect|%252e|/%00|union\)?\(select|char\(\d+\)|/\*!\d+", re.I), "T1211", "WAF/filter evasion"),
 ]
 
 

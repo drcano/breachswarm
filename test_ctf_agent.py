@@ -154,7 +154,7 @@ def test_engagement():
 
 def test_technique_scorecard():
     assert ("T1190", "SQL injection") in classify("q=1' UNION/**/SELECT 1,2")
-    assert ("T1071", "SSRF → cloud metadata") in classify("url=http://2852039166/latest/meta-data/")
+    assert ("T1071", "SSRF → metadata / internal") in classify("url=http://2852039166/latest/meta-data/")
     assert outcome_from(403, "WAF: request blocked")[0] is True      # blocked
     assert outcome_from(200, "{}") == (False, True)                  # evaded + succeeded
     sc = scorecard([{"payload": "1' UNION SELECT", "blocked": True, "success": False},

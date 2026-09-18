@@ -48,16 +48,28 @@ def is_canary(s: str) -> bool:
     return bool(re.search(r"CANARY-[a-zA-Z0-9]{1,16}-[0-9a-f]{12}", s or ""))
 
 
-def announce(deconfliction_path: str | None, phase: str, detail: str = "") -> str:
-    """Write a deconfliction notice (run start/stop, high-impact action) to a shared file the
-    white cell tails. No-op if no channel configured. Returns the line."""
+def announce(channel: str | None, phase: str, detail: str = "", meta: dict | None = None) -> str:
+    """Emit a deconfliction notice (run start/stop, high-impact action) to the white cell.
+    `channel` is EITHER a file path (append a line the SOC tails) OR an http(s) webhook URL
+    (POST JSON — Slack/Teams/generic). Best-effort and non-blocking: a down channel never
+    stops the run. Sends run metadata only (phase/program/operator/timing) — never target
+    data. The operator configures their OWN channel in the RoE, so this is authorized ops
+    comms, not exfil."""
     line = f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {phase.upper()} {detail}".rstrip()
-    if deconfliction_path:
-        try:
-            with open(deconfliction_path, "a") as f:
+    if not channel:
+        return line
+    try:
+        if channel.startswith(("http://", "https://")):
+            import json as _json, urllib.request as _u
+            payload = {"text": line, "phase": phase, "detail": detail, **(meta or {})}
+            req = _u.Request(channel, data=_json.dumps(payload).encode(),
+                             headers={"Content-Type": "application/json"}, method="POST")
+            _u.urlopen(req, timeout=5).read()
+        else:
+            with open(channel, "a") as f:
                 f.write(line + "\n")
-        except OSError:
-            pass
+    except Exception:
+        pass   # deconfliction is best-effort; never block the engagement on a down channel
     return line
 
 

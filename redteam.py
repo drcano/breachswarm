@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import re
 import time
@@ -79,7 +80,8 @@ async def run(eng: Engagement, eng_path: str, target: str, enforce: bool = False
     (workdir / "files").mkdir(parents=True, exist_ok=True)
     audit = AuditChain(str(workdir / "audit_chain.jsonl"))
     audit.record("start", program=eng.scope.program, operator=eng.operator, target=target)
-    announce(eng.deconfliction, "start", f"{eng.scope.program} vs {target} (op={eng.operator})")
+    _meta = {"program": eng.scope.program, "operator": eng.operator, "target": target}
+    announce(eng.deconfliction, "start", f"{eng.scope.program} vs {target} (op={eng.operator})", _meta)
 
     net = proxy_url = None
     cleanup = lambda: None
@@ -118,16 +120,26 @@ async def run(eng: Engagement, eng_path: str, target: str, enforce: bool = False
 
     audit.record("stop", turns=turns, actions=fp["tool_calls"],
                  destructive_blocks=fp["destructive_blocks"])
-    announce(eng.deconfliction, "stop", f"{turns} turns, {fp['tool_calls']} actions")
 
     sc = scorecard(events)
+    save_audit(workdir / "audit.jsonl", trace)
+    chain_ok, msg = audit_verify(str(workdir / "audit_chain.jsonl"))
+    gaps = sorted(tid for tid, r in sc.items() if r["detection_gap"])
     (workdir / "findings.md").write_text(await generate_report(eng.scope.program, target, trace))
     (workdir / "scorecard.md").write_text(
         f"# Blue-team detection scorecard — {eng.scope.program}\n\n"
         f"Target: `{target}` · actions: {fp['tool_calls']} · "
-        f"destructive blocked: {fp['destructive_blocks']}\n\n" + render_scorecard(sc))
-    save_audit(workdir / "audit.jsonl", trace)
-    chain_ok, msg = audit_verify(str(workdir / "audit_chain.jsonl"))
+        f"destructive blocked: {fp['destructive_blocks']} · audit: "
+        f"{'VERIFIED' if chain_ok else 'TAMPERED'}\n\n" + render_scorecard(sc))
+    # machine-readable, for SIEM / dashboard ingestion
+    (workdir / "scorecard.json").write_text(json.dumps({
+        "program": eng.scope.program, "target": target, "operator": eng.operator,
+        "ts": round(time.time()), "turns": turns, "actions": fp["tool_calls"],
+        "destructive_blocked": fp["destructive_blocks"], "audit_verified": chain_ok,
+        "detection_gaps": gaps, "gap_count": len(gaps), "techniques": sc}, indent=2, default=str))
+    announce(eng.deconfliction, "stop",
+             f"{turns} turns, {fp['tool_calls']} actions, {len(gaps)} detection gaps",
+             {**_meta, "detection_gaps": gaps, "audit_verified": chain_ok})
     print(f"[audit] {msg} — chain {'VERIFIED' if chain_ok else 'TAMPERED!'}")
     print(f"[done] {turns} turns; {fp['tool_calls']} actions "
           f"({fp['destructive_blocks']} destructive blocked); "
