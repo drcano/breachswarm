@@ -55,7 +55,7 @@ function tile(k,v,sub){return `<div class="tile"><div class="k">${k}</div><div c
 async function load(){
   const m=await (await fetch("/api/metrics")).json();
   $("#tiles").innerHTML =
-    tile("Solve rate", Math.round(m.solve_rate*100)+"%", `${m.solved}/${m.total}`)
+    tile("Solve rate", Math.round(m.solve_rate*100)+"%", `${m.solved}/${m.total} strict`+(m.case_insensitive>m.solved?` · ${m.case_insensitive}/${m.total} case-insens.`:""))
     + tile("Fastest exploit", m.time_to_exploit.fastest!=null?m.time_to_exploit.fastest+"s":"—")
     + tile("Median exploit", m.time_to_exploit.median!=null?m.time_to_exploit.median+"s":"—")
     + tile("Total spend", "$"+(m.cost_total_usd||0));
