@@ -60,6 +60,45 @@ X-Original-URL) poison cached responses; path confusion (`/account` vs
 (User-Agent/Referer/Cookie), second-order; WAF evasion via `/**/`, case/encoding,
 math (`3*2*1=6`); time-blind when no output.
 
+## Breadth tier — full class coverage (XSS, CSRF, redirect, LFI, authz, MFA, takeover, info-disc)
+
+Final pass for completeness (folded into web specialist step 16). Lower per-report
+yield than the money bugs, but real:
+
+**XSS** — stored (markdown/wiki, SVG upload, filenames, rich-text/Trix), DOM
+(postMessage, innerHTML), reflected (search, redirect_uri, OAuth `state`, errors);
+escalate to cookie/session theft, admin ATO, CSP bypass (nonce leak/prototype poll).
+
+**CSRF** — missing/static/predictable token, JSON CSRF (content-type not checked),
+state-changing GET, referer-only checks, login/logout/connect-account CSRF; chains
+with XSS/IDOR. Check SameSite.
+
+**Open redirect** — `redirect/return/next/url/redirect_uri/RelayState` params; bypass
+`//`, `\`, `@`, path-traversal, CRLF, unicode; chains to **OAuth token theft** and
+phishing.
+
+**LFI / arbitrary file read** — `file/path/download/import` params + `../` (double-
+encode `%252e`, unicode, absolute, UNC, symlink, PDF/render engines); escalate:
+`/etc/passwd`->auth, `.env`/config->keys->RCE, logs->tokens->ATO.
+
+**Authorization** — forced-browse to admin URLs, low->high role escalation,
+cross-tenant access, function-level gaps on REST/GraphQL mutations; test every
+endpoint with minimal/no creds.
+
+**MFA/2FA bypass** — OTP brute-force (no rate limit), response tampering, skipping
+the 2FA step (team invite/account claim/API), backup-code abuse, remember-device
+flaws, race conditions.
+
+**Subdomain takeover** — dangling CNAMEs to unclaimed S3/Heroku/GitHub Pages/Azure/
+Zendesk/Shopify/etc.; prioritize auth/sso/login/api subdomains (enables ATO).
+
+**Info disclosure** — `.env`/`.git`/`.dockerignore`/source-maps, debug modes
+(Django/Laravel/Sentry stack traces), `phpinfo`, GraphQL introspection, over-exposed
+API fields, CORS wildcard, cache-exposed post-logout data.
+
+*Not pulled (negligible yield / not applicable to our targets): clickjacking, DoS,
+OpenID quirks, mobile-specific. Documented here as the known remaining gap.*
+
 ## Per-class technique checklists (now baked into the web specialist)
 
 **IDOR / BOLA** — for every `user_id`/`order_id`/file id/GraphQL node id: swap for

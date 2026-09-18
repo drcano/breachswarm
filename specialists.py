@@ -117,6 +117,16 @@ SPECIALISTS: dict[str, str] = {
         "15. SQLi depth: test array params (`filter[]`), order-by, headers "
         "(User-Agent/Referer/Cookie), and second-order; evade WAFs with `/**/`, "
         "case/encoding, and math (`3*2*1=6` not `1=1`); time-blind when no output.\n"
+        "16. Breadth (lower-tier but real, test if the money bugs miss): XSS (stored "
+        "in markdown/SVG/filenames/rich-text, DOM via postMessage/innerHTML, reflected "
+        "in search/redirect/OAuth-state -> cookie theft/admin ATO); CSRF (missing/"
+        "static token, JSON CSRF, state-changing GET, login/connect-account); open "
+        "redirect (redirect/return/next/url params; bypass //,\\,@,path-traversal -> "
+        "chain to OAuth token theft); authorization (forced-browse to admin, low->high "
+        "role, cross-tenant, function-level gaps); MFA bypass (OTP brute w/o rate "
+        "limit, response tamper, skip-step, remember-device); subdomain takeover "
+        "(dangling CNAME to unclaimed S3/Heroku/Zendesk); info disclosure (.env/.git/"
+        "source-maps/debug/verbose errors/CORS wildcard/over-exposed API fields).\n"
         "Also check robots.txt, /flag, /.env, /.git, /metrics, and default creds."
     ),
     "forensics": _COMMON + (
