@@ -137,6 +137,35 @@ unauthenticated internal endpoints; verb/version tampering; secrets in responses
   business logic, filter-evasion SQLi), `targets/modern_app.py` (GraphQL, NoSQLi,
   XXE) — our lab already exercises most of the top classes.
 
+## Experiment: parallel-recon subagents (prototype) — faster wall-clock, higher cost
+
+Built `recon_agents.parallel_recon` (opt-in via `bounty.py --parallel-recon`): 3
+read-only recon subagents (surface / auth / injection) share one enforced sandbox
+and map the attack surface in parallel, then the exploitation agent works from the
+merged map. Motivated by rest.vulnweb.com's 69-turn breadth cost.
+
+Measured on rest.vulnweb.com (one run each, enforced):
+
+| Metric | Baseline | Parallel-recon |
+|---|---|---|
+| Exploit turns | 69 | **30** (map cut it >half) |
+| Recon turns | 0 | 47 |
+| Total turns | 69 | **77** |
+| Cost | $1.85 | **$2.63** (+42%) |
+| Wall-clock | 339s | **248s** |
+| Report | structured findings | degraded to a raw trace dump |
+
+Verdict: the mechanism works — the surface map more than halves exploitation turns
+and parallelism cuts wall-clock — but recon subagents cost tokens too, so **total
+turns and cost went UP**, and this run's report step degraded. So it's a
+wall-clock/latency win, not a cost win. **Shipped opt-in, OFF by default**; not
+claimed as an improvement. It would pay off where latency matters more than token
+cost, or with cheaper recon (smaller model per subagent) — untested.
+
+Also surfaced a real bug (fixed): a recon subagent hitting its turn cap made the SDK
+raise `ResultError`, which crashed the whole run through `asyncio.gather`; recon is
+now best-effort (partial map on error).
+
 ## Experiment: a prompt-level "chain-aware step" did NOT cut turns (negative result)
 
 Hypothesis: telling the specialist to chase a primitive's pivot before widening

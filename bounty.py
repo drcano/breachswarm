@@ -75,7 +75,7 @@ def _start_enforcement(scope_path: str, image: str = "ctf-agent:full"):
 
 async def hunt(scope: Scope, target: str, backend: str = "docker",
                max_turns: int = 40, scope_path: str | None = None,
-               enforce: bool = False) -> dict:
+               enforce: bool = False, parallel_recon: bool = False) -> dict:
     ok, reason = scope.allows(target)
     print(f"[scope] {target}: {'ALLOWED' if ok else 'REFUSED'} — {reason}")
     if not ok:
@@ -97,17 +97,34 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
             opts = ClaudeAgentOptions(
                 system_prompt=BOUNTY_SYS, mcp_servers={"ctf": _server(sb)},
                 allowed_tools=["mcp__ctf__sandbox_bash"], max_turns=max_turns)
+            recon_turns, recon_cost, recon_map = 0, 0.0, ""
+            usages = []  # raw ResultMessage.model_usage dicts for token-based costing
+            if parallel_recon:
+                from recon_agents import parallel_recon as _precon
+                ctx = (f"Program: {scope.program}. In-scope: {', '.join(scope.in_scope)}. "
+                       f"Rate limit ~{scope.rate_limit_rps} req/s.")
+                pr = await _precon(sb, target, ctx)
+                recon_turns, recon_cost, recon_map = pr["turns"], pr["cost"], pr["map"]
+                usages.extend(pr.get("usages", []))
+                print(f"[parallel-recon] {recon_turns} turns, ${recon_cost}, "
+                      f"{pr['wall_s']}s across {len(pr['areas'])} subagents")
             task = (f"Authorized target: {target}\nProgram: {scope.program}\n"
                     f"In-scope hosts: {', '.join(scope.in_scope)}\n"
                     f"Rate limit: ~{scope.rate_limit_rps} req/s.\n\n"
-                    "Recon the target, then enumerate and safely confirm vulnerabilities. "
+                    + (f"A recon team already mapped the attack surface — start from "
+                       f"this and go straight to exploitation, don't re-enumerate:\n"
+                       f"{recon_map}\n\n" if recon_map else "")
+                    + "Recon the target, then enumerate and safely confirm vulnerabilities. "
                     "Summarize every finding at the end.")
             thoughts, turns, cost = [], 0, None
             async for msg in query(prompt=task, options=opts):
                 if isinstance(msg, AssistantMessage):
                     turns += 1
-                if isinstance(msg, ResultMessage) and msg.total_cost_usd:
-                    cost = msg.total_cost_usd
+                if isinstance(msg, ResultMessage):
+                    if msg.total_cost_usd:
+                        cost = msg.total_cost_usd
+                    if msg.model_usage:
+                        usages.append(msg.model_usage)
                 for b in getattr(msg, "content", []) or []:
                     if isinstance(b, TextBlock):
                         thoughts.append({"t": time.time(), "kind": "thought", "text": b.text})
@@ -121,13 +138,27 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
     # wall-clock speed of the assessment, from the trace timestamps
     ts = [e["t"] for e in trace if "t" in e]
     duration_s = round(ts[-1] - ts[0], 1) if len(ts) > 1 else None
+    total_turns = turns + recon_turns
+    total_cost = (cost or 0) + recon_cost if (cost or recon_cost) else None
+    from pricing import summarize
+    usage = summarize(usages)  # token-based, self-verifiable cost from raw token counts
     row = {"time": time.time(), "program": scope.program, "target": target,
-           "turns": turns, "cost_usd": cost, "duration_s": duration_s,
+           "turns": total_turns, "cost_usd": total_cost, "duration_s": duration_s,
+           "parallel_recon": parallel_recon,
+           "recon_turns": recon_turns, "exploit_turns": turns,
+           "tokens": usage["tokens"],
+           "cost_recomputed_usd": usage["cost_recomputed_usd"],
+           "cost_sdk_usd": usage["cost_sdk_usd"],
            "report": str(workdir / "findings.md")}
     with open(METRICS, "a") as f:
         f.write(json.dumps(row) + "\n")
     dur = f", {duration_s:.0f}s" if duration_s else ""
-    print(f"[done] {turns} turns{dur}; findings -> {workdir/'findings.md'}")
+    split = f" ({recon_turns} recon + {turns} exploit)" if parallel_recon else ""
+    tk = usage["tokens"]
+    print(f"[done] {total_turns} turns{split}{dur}; "
+          f"tokens in/out {tk['input']}/{tk['output']} "
+          f"(+{tk['cache_read']} cache); cost ${usage['cost_recomputed_usd']} "
+          f"recomputed / ${usage['cost_sdk_usd']} sdk; findings -> {workdir/'findings.md'}")
     return row
 
 
@@ -140,9 +171,13 @@ def main():
     ap.add_argument("--enforce", action="store_true",
                     help="no-bypass egress: run the agent on an internal-only network "
                          "whose sole route out is the scope-allowlisting proxy")
+    ap.add_argument("--parallel-recon", action="store_true",
+                    help="fan out read-only recon subagents to map the surface first, "
+                         "then exploit from that map (helps broad targets)")
     args = ap.parse_args()
     asyncio.run(hunt(Scope.load(args.scope), args.target, args.backend,
-                     args.max_turns, scope_path=args.scope, enforce=args.enforce))
+                     args.max_turns, scope_path=args.scope, enforce=args.enforce,
+                     parallel_recon=args.parallel_recon))
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
 from solver import _is_unproductive, _stall_nudge
+from pricing import cost_of, summarize
 
 
 def test_flag_detection():
@@ -51,6 +52,15 @@ def test_routing():
         assert route(label) == spec, f"{label} -> {route(label)} != {spec}"
     for spec in cases.values():
         assert spec in SPECIALISTS
+
+
+def test_pricing():
+    assert cost_of("claude-opus-4-8", 1_000_000, 1_000_000) == 90.0   # 15 + 75
+    assert cost_of("claude-sonnet-5", 1_000_000, 0) == 3.0
+    s = summarize([{"m": {"inputTokens": 2_000_000, "outputTokens": 0,
+                          "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0,
+                          "costUSD": 6.0, "canonicalModel": "claude-sonnet-5"}}])
+    assert s["cost_recomputed_usd"] == 6.0 and s["tokens"]["input"] == 2_000_000
 
 
 def test_dead_end_detector():
