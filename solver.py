@@ -226,6 +226,19 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
 
         found, turns, cost, thoughts = None, 0, None, []
         usages = []  # raw ResultMessage.model_usage for token-based costing (A/B parity)
+        # Per-AssistantMessage token tally — captured even when we early-exit on the flag
+        # BEFORE the SDK's final ResultMessage (the cost gap the audit flagged). Tokens are
+        # the ground-truth efficiency metric; cost stays SDK-sourced where available.
+        am_tok = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+
+        def _acc(u):
+            if not u:
+                return
+            g = lambda *k: next((u[x] for x in k if x in u), 0)  # snake_ or camelCase
+            am_tok["input"] += g("input_tokens", "inputTokens")
+            am_tok["output"] += g("output_tokens", "outputTokens")
+            am_tok["cache_read"] += g("cache_read_input_tokens", "cacheReadInputTokens")
+            am_tok["cache_write"] += g("cache_creation_input_tokens", "cacheCreationInputTokens")
 
         # Fast path: recon (ls/file/strings) may have already surfaced the flag
         # (very common in forensics/general). Solve with zero LLM turns.
@@ -236,8 +249,11 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 break
 
         if not found:
-            servers = {"ctf": _sandbox_server(sb), "kb": _knowledge_server()}
-            tools = ["mcp__ctf__sandbox_bash", "mcp__kb__search_knowledge"]
+            servers = {"ctf": _sandbox_server(sb)}
+            tools = ["mcp__ctf__sandbox_bash"]
+            if os.getenv("CTF_KB", "1") != "0":   # RAG on-demand tool (ablation: CTF_KB=0)
+                servers["kb"] = _knowledge_server()
+                tools.append("mcp__kb__search_knowledge")
             if spec in ("rev", "pwn"):  # binary work gets a decompiler MCP server
                 servers["decomp"] = _decompiler_server(sb)
                 tools.append("mcp__decomp__decompile")
@@ -258,6 +274,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 async for msg in query(prompt=task, options=options):
                     if isinstance(msg, AssistantMessage):
                         turns += 1  # accumulates across attempts
+                        _acc(msg.usage)
                     if isinstance(msg, ResultMessage):
                         if msg.total_cost_usd is not None:
                             cost = (cost or 0) + msg.total_cost_usd  # accumulate; 0.0 is real
@@ -293,6 +310,9 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
     writeup_path.write_text(await generate(ch.name, ch.prompt, trace, solved, found))
     from pricing import summarize
     usage = summarize(usages)
+    # Prefer the per-message tally (captured even on early-exit solves); fall back to the
+    # ResultMessage sum for the rare paths where AssistantMessage carried no usage.
+    tokens = am_tok if am_tok["input"] or am_tok["output"] else usage["tokens"]
     return Result(ch.name, spec, solved, near, found, turns, cost,
                   duration_s, ttf, str(writeup_path), str(audit_path),
-                  cost_sdk_usd=usage["cost_sdk_usd"], tokens=usage["tokens"])
+                  cost_sdk_usd=usage["cost_sdk_usd"], tokens=tokens)
