@@ -19,13 +19,23 @@ challenge ─▶ recon (deterministic probes) ─▶ orchestrator ─▶ special
 
 ## Results — InterCode-CTF (picoCTF-based, ground-truth flags)
 
-| Category | Strict solve |
+**70/100 (70%) on the full InterCode-CTF set, pass@1** — one attempt per task, no
+retries, Docker sandbox. Reproducible: `CTF_SANDBOX=docker python run.py
+challenges/intercode --retries 0 -o results/intercode100.jsonl`. Raw evidence:
+[results/intercode100.jsonl](results/intercode100.jsonl).
+
+| Category | Strict solve (pass@1) |
 |---|---|
-| Crypto (full 19-task category) | 13/19 (68%) |
-| General Skills | 8/8 |
-| Forensics | 9/10 (90%) |
-| Reversing | 8/10 (80%) |
-| **Balanced 6-category run (38 tasks, full toolset + retries)** | **27/38 (71%)** — 75% excluding dead-server web tasks; 1164s @ concurrency 5 |
+| Reversing | 20/27 (74%) |
+| Forensics | 13/15 (87%) |
+| Crypto | 13/19 (68%) |
+| General Skills / misc | 22/33 (67%) |
+| Pwn (binary exploitation — weakest) | 1/4 |
+| Web (live picoCTF servers now offline) | 1/2 |
+| **Total** | **70/100 (70%)** — +6 near-miss (cracked but mis-formatted) |
+
+Median time-to-flag on solved tasks: **13.5s** (fastest 0.3s via a zero-turn recon
+pass, at no model cost).
 
 Strict = exact match to the gold flag (the same check picoCTF runs). Real solves
 include small-N/large-e/triple RSA, X.509 cert parsing, Vigenère, Morse,
