@@ -42,11 +42,16 @@ AREAS = {
 }
 
 
+# Recon is shallow enumeration, not exploitation reasoning — run it on a cheap model
+# so the fan-out doesn't blow the token budget (the flaw the first measurement found).
+RECON_MODEL = "claude-haiku-4-5-20251001"
+
+
 async def _run_area(sb, target: str, ctx: str, name: str, focus: str,
-                    max_turns: int) -> dict:
+                    max_turns: int, model: str = RECON_MODEL) -> dict:
     opts = ClaudeAgentOptions(
         system_prompt=_SYS, mcp_servers={"ctf": _sandbox_server(sb)},
-        allowed_tools=["mcp__ctf__sandbox_bash"], max_turns=max_turns)
+        allowed_tools=["mcp__ctf__sandbox_bash"], max_turns=max_turns, model=model)
     prompt = (f"Target: {target}\n{ctx}\nRECON DIMENSION — {name}: {focus}")
     turns, cost, texts, usages = 0, 0.0, [], []
     try:
@@ -71,13 +76,13 @@ async def _run_area(sb, target: str, ctx: str, name: str, focus: str,
 
 
 async def parallel_recon(sb, target: str, ctx: str = "", areas=None,
-                         max_turns: int = 8) -> dict:
+                         max_turns: int = 8, model: str = RECON_MODEL) -> dict:
     """Fan out read-only recon subagents (sharing `sb`); return a merged surface map
     plus total turns/cost/wall-clock so the caller can measure the trade."""
     areas = areas or list(AREAS)
     t0 = time.time()
     res = await asyncio.gather(*[
-        _run_area(sb, target, ctx, a, AREAS[a], max_turns) for a in areas])
+        _run_area(sb, target, ctx, a, AREAS[a], max_turns, model) for a in areas])
     surface_map = "\n\n".join(f"### recon:{r['area']} ({r['turns']}t)\n{r['map']}"
                               for r in res)
     return {
