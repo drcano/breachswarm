@@ -196,6 +196,8 @@ GhidraMCP for decompilation and a multi-finding report generator.
   bug-bounty engagement (the system refuses unauthorized targets).
 - **[docs/owasp_coverage.md](docs/owasp_coverage.md)** — full OWASP Web + LLM
   matrix, honestly scoped.
+- **[docs/mcp_integration.md](docs/mcp_integration.md)** — how MCP servers are
+  wired into the agent loop (in-process vs external; the decompiler tool).
 - **[results/](results/)** — raw benchmark evidence (JSONL, ground-truth flags).
 - [REPORT.md](REPORT.md) · [STATUS.md](STATUS.md) · `docs/how-it-works.html`
   (visual walkthrough).
