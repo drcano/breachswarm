@@ -29,6 +29,37 @@ before reporting.
 | 🟡 | **Path traversal → file read/write → RCE** | uploads/importers/rewriters |
 | 🟡 | **Credential leakage in CI/CD artifacts** | tokens in git history, build artifacts (GitHub token report = $50K) |
 
+## High-value tier — completion pass (RCE, smuggling, cache, XXE, upload, SSTI, SQLi)
+
+Second scrape pass over the top-severity classes we skipped first time, folded into
+the web specialist (steps 9-15):
+
+**RCE (top payer)** — anything the server *processes* is a candidate: deserialization
+(PHP/Java/pickle), image/doc processors (ImageMagick + `gm convert` arg injection,
+ExifTool, ffmpeg), SSTI->RCE, archive/import. Fingerprint framework + version ->
+known CVE (Struts/Drupal/Airflow/Log4j); dependency confusion on internal packages.
+
+**File upload** — extension/content-type bypass (double-ext, MIME spoof, null byte);
+SVG/HTML -> stored XSS; XML images -> XXE; `../` in filename -> traversal/overwrite;
+polyglots; image-parser RCE. Find where it lands and if it executes.
+
+**XXE** — any XML sink (SVG/docx/xlsx/pptx upload, SAML, SOAP, raw XML) -> file read
++ XXE->SSRF; OOB DNS/HTTP callbacks for blind XXE.
+
+**SSTI** — fingerprint engine (`{{7*7}}` / `${7*7}` / `<%= %>`) in name fields,
+email/PDF/report templates, subject lines -> RCE via sandbox escape.
+
+**Request smuggling** — CL.TE / TE.CL desync on stacked proxies -> cache poisoning,
+auth bypass, request hijack.
+
+**Web cache poisoning/deception** — unkeyed headers (X-Forwarded-Host,
+X-Original-URL) poison cached responses; path confusion (`/account` vs
+`/account.css`) caches a victim's private page.
+
+**SQLi (depth)** — array params (`filter[]`), order-by, headers
+(User-Agent/Referer/Cookie), second-order; WAF evasion via `/**/`, case/encoding,
+math (`3*2*1=6`); time-blind when no output.
+
 ## Per-class technique checklists (now baked into the web specialist)
 
 **IDOR / BOLA** — for every `user_id`/`order_id`/file id/GraphQL node id: swap for
