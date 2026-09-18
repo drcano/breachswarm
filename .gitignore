@@ -39,3 +39,4 @@ results/**
 logs/
 scope.*.json
 !scope.example.json
+results/ab_traces/

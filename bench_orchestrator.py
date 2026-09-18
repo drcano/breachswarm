@@ -7,7 +7,7 @@ Stands up targets/<app> in docker, runs N of each mode, writes results/orchestra
 """
 from __future__ import annotations
 
-import argparse, asyncio, json, os, subprocess, tempfile, time
+import argparse, asyncio, json, os, subprocess, time
 from pathlib import Path
 
 os.environ["CTF_SANDBOX"] = "docker"
@@ -49,8 +49,11 @@ def _up(app: str) -> tuple[str, str]:
 
 
 async def _baseline(name, prompt, flag, wd, max_turns=40) -> dict:
+    # workdir = wd/files (sandbox mount, kept clean); outdir = wd (audit/writeup persist
+    # for post-hoc diagnosis of failures — see the /debug decoy loop we caught).
     ch = Challenge(name=name, category="Web Exploitation", prompt=prompt,
-                   workdir=wd, outdir=wd, flag_pattern=r"flag\{[^}\s]+\}", real_flag=flag)
+                   workdir=str(Path(wd) / "files"), outdir=wd,
+                   flag_pattern=r"flag\{[^}\s]+\}", real_flag=flag)
     r = await solve(ch, max_turns=max_turns, retries=0)
     return {"mode": "baseline", "name": name, "solved": r.solved, "flag": r.flag,
             "turns": r.turns, "cost_usd": r.cost_usd, "duration_s": r.duration_s}
@@ -78,19 +81,22 @@ async def main():
     try:
         for i in range(args.n):
             for mode in modes:
-                with tempfile.TemporaryDirectory() as wd:
-                    (Path(wd) / "note.txt").write_text("web target; no local files\n")
-                    tag = f"{args.app}-{mode}-{i+1}"
+                tag = f"{args.app}-{mode}-{i+1}".replace(".py", "")
+                wd = str((Path("results/ab_traces") / tag).resolve())
+                (Path(wd) / "files").mkdir(parents=True, exist_ok=True)
+                (Path(wd) / "files" / "note.txt").write_text("web target; no local files\n")
+                sbwd = str(Path(wd) / "files")   # sandbox mount (clean); traces -> wd
+                if True:
                     print(f"[run] {tag} ...", flush=True)
                     t = time.time()
                     try:
                         if mode == "baseline":
                             row = await _baseline(tag, prompt, flag, wd, args.base_turns)
                         elif mode == "stateful":
-                            row = await solve_stateful(tag, prompt, wd, real_flag=flag,
+                            row = await solve_stateful(tag, prompt, sbwd, real_flag=flag,
                                                        max_turns=args.base_turns)
                         else:
-                            row = await solve_chain(tag, prompt, wd, real_flag=flag,
+                            row = await solve_chain(tag, prompt, sbwd, real_flag=flag,
                                                     orch_max_turns=args.orch_turns,
                                                     spec_max_turns=args.spec_turns)
                     except Exception as e:

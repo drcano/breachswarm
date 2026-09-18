@@ -4,7 +4,7 @@ Run: ./.venv/bin/python test_ctf_agent.py
 from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
-from solver import _is_unproductive, _stall_nudge
+from solver import _is_unproductive, _stall_nudge, _decoy_nudge
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
 
@@ -94,6 +94,15 @@ def test_dead_end_detector():
     assert notes[:4] == ["", "", "", ""] and "dead-end detector" in notes[4]
     # cooldown: quiet immediately after firing even if still dense
     assert _stall_nudge(fails, st) == ""
+
+
+def test_decoy_nudge():
+    # a decoy flag in tool output triggers explicit feedback so the agent stops re-fetching
+    n = _decoy_nudge('{"flag": "flag{debug_endpoint_not_the_real_flag}"}')
+    assert "decoy detected" in n and "re-fetch" in n
+    # a real flag in output produces no nudge (must not warn on genuine finds)
+    assert _decoy_nudge("flag{f0rtr3ss_ch41n_5sti_after_ssrf_pwn}") == ""
+    assert _decoy_nudge("HTTP/1.1 200 OK\n{\"data\":1}") == ""
 
 
 def test_recon_classify():

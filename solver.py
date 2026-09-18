@@ -25,7 +25,7 @@ from claude_agent_sdk import (
     AssistantMessage, TextBlock, ToolResultBlock, ResultMessage,
 )
 
-from flag import find_flag, is_correct, is_near_miss
+from flag import find_flag, is_correct, is_near_miss, DEFAULT_FLAG_RE, _is_placeholder
 from recon import recon, brief_text
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
@@ -119,16 +119,31 @@ def _stall_nudge(out: str, state: dict) -> str:
     return ""
 
 
+def _decoy_nudge(out: str) -> str:
+    """Tell the agent when a tool result contains a KNOWN DECOY flag (self-labeled
+    fake/placeholder/honeypot). Silent rejection by find_flag alone made the agent
+    re-fetch a /debug honeypot 50x on Fortress (see docs/OVERNIGHT.md) — closing the
+    loop with explicit feedback stops the flail and is correct on real honeypots too."""
+    for m in DEFAULT_FLAG_RE.finditer(out or ""):
+        if _is_placeholder(m.group(0)):
+            return ("\n\n[decoy detected] " + m.group(0) + " is a KNOWN DECOY / honeypot "
+                    "(self-labeled fake/placeholder) — NOT the real flag. Do not report it "
+                    "and do NOT re-fetch that endpoint; the real flag comes from completing "
+                    "the exploit chain elsewhere.")
+    return ""
+
+
 def _sandbox_server(sb):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
-    Wraps each result with the structural dead-end detector."""
+    Wraps each result with the structural dead-end detector + decoy feedback."""
     stall = {"window": [], "cooldown": 0}
 
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
           {"command": str})
     async def sandbox_bash(args):
         out = sb.bash(args["command"])
-        return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)}]}
+        return {"content": [{"type": "text",
+                             "text": out + _stall_nudge(out, stall) + _decoy_nudge(out)}]}
 
     return create_sdk_mcp_server(name="ctf", version="0.1", tools=[sandbox_bash])
 

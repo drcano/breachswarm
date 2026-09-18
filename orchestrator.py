@@ -28,7 +28,7 @@ from claude_agent_sdk import (query, ClaudeAgentOptions, tool, create_sdk_mcp_se
 from config import MODEL
 from flag import find_flag, is_correct
 from specialists import SPECIALISTS
-from solver import _knowledge_server, _block_text
+from solver import _knowledge_server, _block_text, _decoy_nudge
 from sandbox import make_sandbox
 from recon import recon, brief_text
 
@@ -62,7 +62,8 @@ def _orchestrator_servers(sb, blackboard, counters):
     @tool("sandbox_bash", "Run a shell command in the shared sandbox (recon/verify)",
           {"command": str})
     async def sandbox_bash(args):
-        return {"content": [{"type": "text", "text": sb.bash(args.get("command", ""))}]}
+        out = sb.bash(args.get("command", ""))
+        return {"content": [{"type": "text", "text": out + _decoy_nudge(out)}]}
 
     @tool("record_artifact",
           "Save a discovered artifact (token/key/credential/internal-url/role) to the "
