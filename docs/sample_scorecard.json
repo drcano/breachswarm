@@ -1,0 +1,41 @@
+{
+  "program": "OWASP Juice Shop (own instance) \u2014 emulation dry-run",
+  "target": "http://172.17.0.2:3000",
+  "operator": "dante <realdantecano@gmail.com>",
+  "ts": 1789765180,
+  "turns": 18,
+  "actions": 7,
+  "destructive_blocked": 0,
+  "audit_verified": true,
+  "detection_gaps": [
+    "T1190",
+    "T1213"
+  ],
+  "gap_count": 2,
+  "techniques": {
+    "T1190": {
+      "attempts": 3,
+      "blocked": 0,
+      "missed": 3,
+      "labels": [
+        "SQL injection"
+      ],
+      "name": "Exploit Public-Facing Application",
+      "tactic": "Initial Access",
+      "control": "WAF/IDS",
+      "detection_gap": true
+    },
+    "T1213": {
+      "attempts": 1,
+      "blocked": 0,
+      "missed": 1,
+      "labels": [
+        "IDOR / BOLA object access"
+      ],
+      "name": "Data from Information Repositories",
+      "tactic": "Collection",
+      "control": "DLP/authz",
+      "detection_gap": true
+    }
+  }
+}
