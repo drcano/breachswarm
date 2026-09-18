@@ -78,8 +78,17 @@ def products():
     # tokens table works even though `union select` with whitespace is WAF-blocked.
     q = f"SELECT name,price FROM products WHERE category='{cat}'"
     low = cat.lower()
-    if "union" in low and "select" in low and "tokens" in low:
-        return jsonify(query=q, rows=[{"name": "api_token", "price": LOW_TOKEN}])
+    if "union" in low and "select" in low:
+        # schema enumeration: let the attacker DISCOVER the tokens table (methodology,
+        # not a guessing game). Simulates UNION into information_schema.
+        if "information_schema" in low or "table_name" in low or "sqlite_master" in low:
+            return jsonify(query=q, rows=[{"name": "products", "price": "table"},
+                                          {"name": "users", "price": "table"},
+                                          {"name": "tokens", "price": "table"}])
+        if "tokens" in low:                       # UNION into the discovered table
+            return jsonify(query=q, rows=[{"name": "api_token", "price": LOW_TOKEN}])
+        # a UNION against a wrong/unknown table errors — a real column/table mismatch
+        return jsonify(error="SQL error: no such table in UNION"), 500
     if "'" in cat:  # unbalanced quote → SQL error signal (helps confirm injectability)
         return jsonify(error=f"SQL syntax error near: {cat[:40]}"), 500
     return jsonify(rows=[{"name": "Widget", "price": 9.99}])
