@@ -465,9 +465,14 @@ def _auto_blind(sb, cmd: str, out: str, state: dict) -> str:
         state["auto_fired"] = state["blind_used"] = True
         res = _blind_extract(sb, {"oracle_url": f"{base}?{param}=0||{{cond}}", "true_marker": marker,
                                   "subquery": "(select flag from secrets)"})
-        return (f"\n\n[auto-exploit] {param} on this endpoint returns a two-state (results vs "
-                f"empty) response — a boolean-blind oracle. Ran blind_extract for you "
-                f"(marker={marker!r}):\n{res}")
+        if "BLIND_EXTRACT_OK" in res:
+            return (f"\n\n[auto-exploit] {param} is a boolean-blind SQLi oracle — auto-ran "
+                    f"blind_extract (marker={marker!r}) and recovered:\n{res}")
+        # calibration failed -> it's a normal two-state search, NOT SQLi. Say so, so the misfire
+        # is self-correcting and doesn't send the agent chasing injection that isn't there.
+        return (f"\n\n[auto-exploit] tested {param} as a boolean-blind SQLi oracle but calibration "
+                f"FAILED — this is a normal two-state search, NOT injectable. Do not treat this "
+                f"endpoint as SQLi; move on.\n{res}")
     return ""
 
 
