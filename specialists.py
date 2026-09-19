@@ -153,6 +153,12 @@ SPECIALISTS: dict[str, str] = {
         "secrets)`). It runs the whole paced binary-search extraction in-sandbox, auto-"
         "escalates URL-encoding depth to clear the WAF, and backs off on HTTP 429 — one "
         "call returns the full string. Use it for any blind SQLi/data read."
+        "\n19. EXPLOIT PRIMITIVES — prefer these one-call tools over hand-looping; each runs the "
+        "whole paced routine in-sandbox: `blind_extract` (boolean-blind read via a content "
+        "marker), `time_blind` (blind read when only response LATENCY differs — no marker), "
+        "`jwt_forge` (a target's JWT + your claim overrides -> alg:none / weak-secret crack / "
+        "RS256->HS256 confusion), `ssrf_recon` (confirmed SSRF/fetch param -> map cloud-metadata "
+        "and internal services THROUGH it). Confirm the vuln first, then call the primitive once."
     ),
     "forensics": _COMMON + (
         "\nFORENSICS specialist. Decision tree:\n"

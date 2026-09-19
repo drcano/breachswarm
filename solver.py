@@ -30,6 +30,7 @@ from claude_agent_sdk import (
 from flag import find_flag, is_correct, is_near_miss, DEFAULT_FLAG_RE, _is_placeholder
 from recon import recon, brief_text, _web_recon, profile_surface
 from scratchpad import Scratchpad, netloc_of
+from primitives import jwt_forge, time_blind, ssrf_recon
 import memory
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
@@ -376,6 +377,44 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
         sp.note(args.get("key", ""), args.get("value", ""))
         return {"content": [{"type": "text", "text": "noted.\n" + sp.summary()}]}
 
+    # --- executable exploit primitives: one call runs the whole routine in-sandbox ---
+    @tool("jwt_forge",
+          "Forge JWT auth-bypass tokens in ONE call: emits alg:none variants, cracks a weak "
+          "HS256/384/512 secret (builtin list + optional wordlist) and re-signs, and does "
+          "RS256->HS256 alg-confusion when a public key is given — all with your claim "
+          "overrides applied. Use when a target authenticates with a JWT.",
+          {"token": str, "claims": str, "wordlist": str, "public_key": str})
+    async def jwt_forge_tool(args):
+        raw = args.get("claims") or "{}"
+        try:
+            claims = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except Exception:
+            return {"content": [{"type": "text", "text": "jwt_forge error: 'claims' must be a "
+                    "JSON object string, e.g. '{\"role\":\"admin\",\"sub\":\"1\"}'."}]}
+        return {"content": [{"type": "text", "text": jwt_forge.run(sb, {**args, "claims": claims})}]}
+
+    @tool("time_blind",
+          "Time-based blind extraction in ONE call: binary-searches a secret using response "
+          "DELAY as the oracle (slow == condition true), median-of-N against jitter, backs off "
+          "on 429. Use when injection is blind and there's NO content marker to diff (else use "
+          "blind_extract). oracle_url must contain {cond}; set sleep_expr to the DB's sleep "
+          "(sleep({d}) MySQL, pg_sleep({d}) Postgres).",
+          {"oracle_url": str, "inject_template": str, "sleep_expr": str, "subquery": str,
+           "delay_s": float, "threshold_s": float, "reps": int, "max_len": int,
+           "encode_depth": int, "delay_between": float})
+    async def time_blind_tool(args):
+        return {"content": [{"type": "text", "text": time_blind.run(sb, args)}]}
+
+    @tool("ssrf_recon",
+          "Map internal surfaces THROUGH a confirmed SSRF/fetch param in ONE call: sweeps cloud "
+          "metadata + common loopback services, reflects out the fetched body, reports what "
+          "answered (highlighting creds/banners). Use after confirming a param makes the server "
+          "fetch a URL. ssrf_url must contain {target}.",
+          {"ssrf_url": str, "targets": str, "success_re": str, "reflect_re": str,
+           "timeout": float, "delay_between": float})
+    async def ssrf_recon_tool(args):
+        return {"content": [{"type": "text", "text": ssrf_recon.run(sb, args)}]}
+
     @tool("blind_extract",
           "Extract a secret through a CONFIRMED boolean-blind oracle in ONE call: it runs "
           "the full paced binary-search extraction in-sandbox, auto-escalates URL-encode "
@@ -390,7 +429,8 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
         return {"content": [{"type": "text", "text": _blind_extract(sb, args)}]}
 
     return create_sdk_mcp_server(name="ctf", version="0.1",
-                                 tools=[sandbox_bash, blind_extract, note])
+                                 tools=[sandbox_bash, blind_extract, note,
+                                        jwt_forge_tool, time_blind_tool, ssrf_recon_tool])
 
 
 def _decompiler_server(sb):
@@ -507,7 +547,8 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
             recon_lean = os.getenv("RECON_DEPTH", "lean") != "full"
             recon_cap = int(os.getenv("RECON_MAX_SURFACES", "6"))
             servers = {"ctf": _sandbox_server(sb, sp, recon_cap, recon_lean)}
-            tools = ["mcp__ctf__sandbox_bash", "mcp__ctf__blind_extract", "mcp__ctf__note"]
+            tools = ["mcp__ctf__sandbox_bash", "mcp__ctf__blind_extract", "mcp__ctf__note",
+                     "mcp__ctf__jwt_forge", "mcp__ctf__time_blind", "mcp__ctf__ssrf_recon"]
             if os.getenv("CTF_KB", "1") != "0":   # RAG on-demand tool (ablation: CTF_KB=0)
                 servers["kb"] = _knowledge_server()
                 tools.append("mcp__kb__search_knowledge")
