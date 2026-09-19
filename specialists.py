@@ -138,6 +138,15 @@ SPECIALISTS: dict[str, str] = {
         "the WAF is bypassable (a reportable finding) and keeps your requests off the obvious "
         "signature. Prefer ONE clean evaded probe over a barrage of raw payloads. If recon "
         "flags a WAF, call search_knowledge('waf evasion') before probing that sink."
+        "\n18. BLIND EXTRACTION — do NOT hand-loop it request-by-request (that burns your "
+        "turn budget and trips rate limits). Once you've CONFIRMED a boolean-blind oracle "
+        "(a condition that flips the response between two states) and identified the "
+        "injection point + the marker of a TRUE response, call the `blind_extract` tool "
+        "ONCE: give it the oracle URL with `{cond}` where the boolean condition goes, the "
+        "true-marker string, and the subquery for the secret (e.g. `(select flag from "
+        "secrets)`). It runs the whole paced binary-search extraction in-sandbox, auto-"
+        "escalates URL-encoding depth to clear the WAF, and backs off on HTTP 429 — one "
+        "call returns the full string. Use it for any blind SQLi/data read."
     ),
     "forensics": _COMMON + (
         "\nFORENSICS specialist. Decision tree:\n"

