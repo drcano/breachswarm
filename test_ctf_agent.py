@@ -144,6 +144,18 @@ def test_target_profiler():
     assert profile_surface("<link href='/wp-content/x.css'>")["archetype"] == "CMS"
 
 
+def test_memory_priors():
+    import tempfile, memory
+    from pathlib import Path
+    p = Path(tempfile.mkdtemp()) / "m.jsonl"
+    for i in range(2):
+        memory.record("REST-JSON API", {"param": "q", "encode_depth": "3"}, True, f"r{i}", ledger=p)
+    memory.record("REST-JSON API", {"z": "1"}, False, "unsolved", ledger=p)   # ignored
+    s = memory.priors("REST-JSON API", p)
+    assert "2 solved" in s and "param" in s and "encode_depth" in s
+    assert memory.priors("GraphQL API", p) == ""    # no experience -> no misleading prior
+
+
 def test_injection_guard():
     st = {}
     # an override attempt in target output is flagged (once), and the agent is told it's DATA

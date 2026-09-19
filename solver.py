@@ -30,6 +30,7 @@ from claude_agent_sdk import (
 from flag import find_flag, is_correct, is_near_miss, DEFAULT_FLAG_RE, _is_placeholder
 from recon import recon, brief_text, _web_recon, profile_surface
 from scratchpad import Scratchpad, netloc_of
+import memory
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
 from writeup import generate, save_audit
@@ -469,12 +470,14 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
         # Shared state model for the whole run: seed it with the perimeter surface recon
         # already mapped, so staged recon doesn't re-probe it and the agent starts stateful.
         sp = Scratchpad()
+        archetype = ""
         if init_nl := next(iter(_netlocs(ch.prompt)), ""):
             bt = brief_text(brief)
             tech, waf, eps = _digest(bt)
             prof = profile_surface(bt)
+            archetype = prof["archetype"]
             sp.add_surface(init_nl, tech=tech or prof["stack"], waf=waf, endpoints=eps,
-                           archetype=prof["archetype"], hunt=prof["hunt"], skip=prof["skip"])
+                           archetype=archetype, hunt=prof["hunt"], skip=prof["skip"])
 
         found, turns, cost, thoughts = None, 0, None, []
         usages = []  # raw ResultMessage.model_usage for token-based costing (A/B parity)
@@ -518,8 +521,10 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 max_turns=max_turns,
                 model=MODEL,
             )
+            prior = memory.priors(archetype)   # advisory recon prior from past runs of this archetype
             base = (f"Challenge: {ch.name}\n\n{ch.prompt}\n\n{brief_text(brief)}\n\n"
-                    "The challenge files are in your current working directory. Find the flag.")
+                    + (prior + "\n\n" if prior else "")
+                    + "The challenge files are in your current working directory. Find the flag.")
             # Up to (1 + retries) attempts; each retry nudges a different approach.
             for attempt in range(retries + 1):
                 task = base if attempt == 0 else base + (
@@ -562,6 +567,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
     writeup_path = out / "writeup.md"
     save_audit(audit_path, trace)
     (out / "scratchpad.json").write_text(json.dumps(sp.dump(), indent=2, default=str))
+    memory.record(archetype, sp.facts, solved, ch.name)   # compound: learn per archetype across runs
     writeup_path.write_text(await generate(ch.name, ch.prompt, trace, solved, found))
     from pricing import summarize
     usage = summarize(usages)
