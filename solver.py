@@ -471,7 +471,8 @@ def _auto_blind(sb, cmd: str, out: str, state: dict) -> str:
     return ""
 
 
-def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = True):
+def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = True,
+                    defang: bool = True):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
     Wraps each result with the dead-end detector + decoy/WAF/rate nudges, AUTO-FIRES staged
     recon on any new surface, and keeps a shared scratchpad (surfaces + confirmed facts) live
@@ -482,7 +483,12 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
           {"command": str})
     async def sandbox_bash(args):
-        out, inj = _injection_guard(sb.bash(args["command"]), stall)  # defang untrusted output
+        # Defang untrusted output ONLY for network runs (web/osint/llm), where a live target can
+        # inject via a response. Air-gapped categories (forensics/rev/crypto) have no external
+        # injection vector, and stripping zero-width/bidi bytes would CORRUPT legitimate challenge
+        # data (e.g. a flag hidden in zero-width unicode — a real stego technique). Audit catch.
+        raw = sb.bash(args["command"])
+        out, inj = _injection_guard(raw, stall) if defang else (raw, "")
         extra = (_stall_nudge(out, stall) + _decoy_nudge(out) + _waf_nudge(out, stall)
                  + _rate_nudge(out, stall) + inj + _blind_probe_nudge(args["command"], stall)
                  + _spray_nudge(args["command"], stall) + _diy_nudge(args["command"], stall)
@@ -683,7 +689,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
         if not found:
             recon_lean = os.getenv("RECON_DEPTH", "lean") != "full"
             recon_cap = int(os.getenv("RECON_MAX_SURFACES", "6"))
-            servers = {"ctf": _sandbox_server(sb, sp, recon_cap, recon_lean)}
+            servers = {"ctf": _sandbox_server(sb, sp, recon_cap, recon_lean, defang=needs_net)}
             tools = ["mcp__ctf__sandbox_bash", "mcp__ctf__blind_extract", "mcp__ctf__note",
                      "mcp__ctf__jwt_forge", "mcp__ctf__time_blind", "mcp__ctf__ssrf_recon"]
             if os.getenv("CTF_KB", "1") != "0":   # RAG on-demand tool (ablation: CTF_KB=0)
