@@ -357,8 +357,8 @@ def _injection_guard(out: str, state: dict) -> tuple[str, str]:
 # many times and MISDECIDING "not injectable" instead of delegating to blind_extract (whose
 # calibration probe IS the injectability test). Nudge it to the primitive after a few manual
 # injection probes with no blind_extract call yet.
-_BLIND_PROBE_RE = re.compile(
-    r"substr\(|ascii\(|\bunion\b|\bselect\b|\bsleep\(|\bpg_sleep\(|1\s*=\s*1|\|\||&&|%7c%7c|chr\(",
+_BLIND_PROBE_RE = re.compile(     # SQL-specific only: bare ||/&& are common shell ops (false fires)
+    r"substr\(|ascii\(|\bunion\b|\bselect\b|\bsleep\(|\bpg_sleep\(|\bor\s+1\s*=\s*1|group_concat",
     re.I)
 
 # Don't-reinvent-the-primitive: the frontier run's real failure — the agent WROTE ITS OWN
