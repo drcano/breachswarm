@@ -12,6 +12,7 @@ from knowledge_base import get_kb
 
 # (query a specialist would actually ask, substring that proves the right card hit)
 CASES: list[tuple[str, str]] = [
+    ("how do threat actors structure reconnaissance", "map before you probe"),
     ("bypass WAF blocking union select", "union/**/select"),
     ("read cloud metadata credentials via ssrf", "169.254"),
     ("code execution from a template input field", "{{7*7}}"),
