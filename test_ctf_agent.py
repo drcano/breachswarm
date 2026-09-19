@@ -5,7 +5,7 @@ from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
 from solver import (_is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge,
-                    _staged_recon, _digest, _injection_guard)
+                    _staged_recon, _digest, _injection_guard, _blind_probe_nudge)
 from scratchpad import Scratchpad, netloc_of
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
@@ -154,6 +154,21 @@ def test_memory_priors():
     s = memory.priors("REST-JSON API", p)
     assert "2 solved" in s and "param" in s and "encode_depth" in s
     assert memory.priors("GraphQL API", p) == ""    # no experience -> no misleading prior
+
+
+def test_blind_probe_nudge():
+    # 3 manual injection probes with no blind_extract call -> nudge once toward the primitive
+    st = {}
+    probe = "curl 'http://t/api/search?q=0||ascii(substr((select flag from secrets),1,1))>64'"
+    assert _blind_probe_nudge(probe, st) == "" and _blind_probe_nudge(probe, st) == ""
+    n = _blind_probe_nudge(probe, st)
+    assert "blind_extract" in n and "injectability test" in n
+    assert _blind_probe_nudge(probe, st) == ""          # one-shot
+    # once blind_extract was actually called, never nudge (delegated already)
+    st2 = {"blind_used": True}
+    assert _blind_probe_nudge(probe, st2) == "" and _blind_probe_nudge(probe, st2) == ""
+    # benign recon must not trip it
+    assert _blind_probe_nudge("curl -s http://t/api/health", {}) == ""
 
 
 def test_injection_guard():

@@ -353,6 +353,32 @@ def _injection_guard(out: str, state: dict) -> tuple[str, str]:
     return cleaned, ""
 
 
+# Reach-for-the-primitive: the handcuffed runs showed the agent hand-probing a blind oracle
+# many times and MISDECIDING "not injectable" instead of delegating to blind_extract (whose
+# calibration probe IS the injectability test). Nudge it to the primitive after a few manual
+# injection probes with no blind_extract call yet.
+_BLIND_PROBE_RE = re.compile(
+    r"substr\(|ascii\(|\bunion\b|\bselect\b|\bsleep\(|\bpg_sleep\(|1\s*=\s*1|\|\||&&|%7c%7c|chr\(",
+    re.I)
+
+
+def _blind_probe_nudge(cmd: str, state: dict) -> str:
+    if state.get("blind_used") or state.get("blind_nudged"):
+        return ""
+    if _BLIND_PROBE_RE.search(cmd or ""):
+        state["blind_probes"] = state.get("blind_probes", 0) + 1
+        if state["blind_probes"] >= 3:
+            state["blind_nudged"] = True
+            return ("\n\n[reach for the primitive] you're hand-probing a blind/injection oracle "
+                    "by curl. STOP guessing whether it's injectable — CALL blind_extract (content "
+                    "marker) or time_blind (latency only): give it the oracle URL with {cond}, the "
+                    "true-marker, and the subquery. Its calibration probe IS the injectability "
+                    "test AND it auto-escalates WAF encode-depth, then extracts in one shot. Do "
+                    "NOT conclude 'not injectable' without trying the primitive; hand-looping "
+                    "burns your turn budget.")
+    return ""
+
+
 def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = True):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
     Wraps each result with the dead-end detector + decoy/WAF/rate nudges, AUTO-FIRES staged
@@ -366,7 +392,7 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
     async def sandbox_bash(args):
         out, inj = _injection_guard(sb.bash(args["command"]), stall)  # defang untrusted output
         extra = (_stall_nudge(out, stall) + _decoy_nudge(out) + _waf_nudge(out, stall)
-                 + _rate_nudge(out, stall) + inj
+                 + _rate_nudge(out, stall) + inj + _blind_probe_nudge(args["command"], stall)
                  + _staged_recon(sb, sp, args["command"], out, recon_cap, recon_lean))
         if sp.changed():
             extra += "\n\n[scratchpad — reuse this, don't re-derive]\n" + sp.summary()
@@ -408,6 +434,7 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
            "delay_s": float, "threshold_s": float, "reps": int, "max_len": int,
            "encode_depth": int, "delay_between": float})
     async def time_blind_tool(args):
+        stall["blind_used"] = True
         return {"content": [{"type": "text", "text": time_blind.run(sb, args)}]}
 
     @tool("ssrf_recon",
@@ -431,6 +458,7 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
           {"oracle_url": str, "true_marker": str, "subquery": str,
            "max_len": int, "encode_depth": int, "delay": float})
     async def blind_extract(args):
+        stall["blind_used"] = True            # delegated: stop nudging toward the primitive
         return {"content": [{"type": "text", "text": _blind_extract(sb, args)}]}
 
     return create_sdk_mcp_server(name="ctf", version="0.1",
