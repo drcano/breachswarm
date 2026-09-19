@@ -30,7 +30,7 @@ from claude_agent_sdk import (
 from flag import find_flag, is_correct, is_near_miss, DEFAULT_FLAG_RE, _is_placeholder
 from recon import recon, brief_text, _web_recon, profile_surface
 from scratchpad import Scratchpad, netloc_of
-from primitives import jwt_forge, time_blind, ssrf_recon
+from primitives import jwt_forge, time_blind, ssrf_recon, symbolic_solve
 import memory
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
@@ -457,7 +457,17 @@ def _decompiler_server(sb):
                f"echo === DISASM ===; pdf' '{b}' 2>&1 | head -300")
         return {"content": [{"type": "text", "text": sb.bash(cmd)}]}
 
-    return create_sdk_mcp_server(name="decomp", version="0.1", tools=[decompile])
+    @tool("symbolic_solve",
+          "Solve a crackme-style binary with symbolic execution (angr) in ONE call: give the "
+          "binary path and a win condition — a success STRING printed on stdout (e.g. 'Correct') "
+          "or a target address (e.g. '0x401234') — and it returns the concrete stdin (or argv, "
+          "set argv=true) that reaches it. Use instead of reversing the check by hand.",
+          {"binary": str, "find": str, "avoid": str, "stdin_len": int, "argv": bool})
+    async def symbolic_solve_tool(args):
+        return {"content": [{"type": "text", "text": symbolic_solve.run(sb, args)}]}
+
+    return create_sdk_mcp_server(name="decomp", version="0.1",
+                                 tools=[decompile, symbolic_solve_tool])
 
 
 def _knowledge_server():
@@ -554,7 +564,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 tools.append("mcp__kb__search_knowledge")
             if spec in ("rev", "pwn"):  # binary work gets a decompiler MCP server
                 servers["decomp"] = _decompiler_server(sb)
-                tools.append("mcp__decomp__decompile")
+                tools += ["mcp__decomp__decompile", "mcp__decomp__symbolic_solve"]
             options = ClaudeAgentOptions(
                 system_prompt=SPECIALISTS[spec],
                 mcp_servers=servers,

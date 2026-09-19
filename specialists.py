@@ -50,8 +50,10 @@ SPECIALISTS: dict[str, str] = {
         "name — prefer it over reading "
         "raw disassembly by hand. READ the decompiled logic; this is where you are "
         "strongest.\n"
-        "4. 'input == secret' / keygen / license check? Use `angr` to solve for the "
-        "input (time-box to ~120s; it explodes on big binaries).\n"
+        "4. 'input == secret' / keygen / license check? Call the `symbolic_solve` tool with "
+        "the binary path and the win condition (a success STRING on stdout like 'Correct', or a "
+        "target address) — it runs angr and returns the exact input in one call. Prefer it over "
+        "hand-driving angr. (It time-boxes and can explode on heavy loops/crypto.)\n"
         "5. Reconstruct the check in Python and compute the answer.\n"
         "Rosetta runs x86-64 here, so you may execute the binary to observe behavior."
     ),

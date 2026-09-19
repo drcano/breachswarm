@@ -33,6 +33,9 @@ RUN git clone --depth 1 https://github.com/RsaCtfTool/RsaCtfTool /opt/RsaCtfTool
 # core pwn (must succeed); ROPgadget/ropper best-effort — their dep filebytes
 # uses ast.Str, removed in py3.12+ (Kali py3.13). pwntools' own ROP() + one_gadget
 # cover ROP-chaining without them.
+# angr 10.x BUNDLES claripy (angr.rustylib.claripy) — do NOT `pip install claripy`
+# separately: the standalone pkg downgrades z3-solver and breaks angr's rust claripy.
+# The symbolic_solve primitive imports it as `angr.claripy`.
 RUN pip3 install --break-system-packages pwntools angr r2pipe
 # r2ghidra: Ghidra's decompiler engine as an r2 plugin (`pdg`) — Ghidra-quality
 # output, no JDK/GUI. Would power the `decompile` MCP tool with real decompilation.
