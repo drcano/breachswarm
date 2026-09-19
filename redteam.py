@@ -28,7 +28,8 @@ from audit_chain import AuditChain, verify as audit_verify
 from techniques import classify, outcome_from, scorecard, render as render_scorecard
 from safety import guard_destructive, announce
 from bounty import BOUNTY_SYS, _start_enforcement
-from solver import _knowledge_server, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge
+from solver import (_knowledge_server, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge,
+                    _injection_guard)
 from sandbox import make_sandbox
 from report import generate_report
 from writeup import save_audit
@@ -52,7 +53,7 @@ def _server(sb, audit: AuditChain, events: list, fp: dict, destructive_ok: bool)
             fp["destructive_blocks"] += 1
             audit.record("blocked", command=cmd[:500], reason="destructive")
             return {"content": [{"type": "text", "text": why}]}
-        out = sb.bash(cmd)
+        out, inj = _injection_guard(sb.bash(cmd), stall)   # defang untrusted target output
         fp["tool_calls"] += 1
         status = _status(out)
         blocked, success = outcome_from(status, out)
@@ -63,7 +64,7 @@ def _server(sb, audit: AuditChain, events: list, fp: dict, destructive_ok: bool)
             events.append({"payload": cmd, "blocked": blocked, "success": success})
         return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)
                              + _decoy_nudge(out) + _waf_nudge(out, stall)
-                             + _rate_nudge(out, stall)}]}
+                             + _rate_nudge(out, stall) + inj}]}
 
     return create_sdk_mcp_server(name="ctf", version="1.0", tools=[sandbox_bash])
 

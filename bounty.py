@@ -54,7 +54,8 @@ def _server(sb):
     """Stealth-aware sandbox tool: dead-end detector (from solver) + a per-endpoint
     circuit breaker that STOPS sending real traffic to endpoints that keep erroring
     (the 190-hit tarpit in the Fortress run). Tracks a request/error footprint."""
-    from solver import _stall_nudge, _is_unproductive, _decoy_nudge, _waf_nudge, _rate_nudge
+    from solver import (_stall_nudge, _is_unproductive, _decoy_nudge, _waf_nudge, _rate_nudge,
+                        _injection_guard)
     stall = {"window": [], "cooldown": 0}
     endpoint_errs = defaultdict(int)   # path -> consecutive error count
     fp = {"tool_calls": 0, "error_results": 0, "circuit_blocks": 0, "destructive_blocks": 0}
@@ -83,7 +84,7 @@ def _server(sb):
                     f"errors {ERR_THRESH}+ times — request NOT sent (footprint control). "
                     "These are dead ends/tarpits. Pivot to a different endpoint or "
                     "technique; do not keep probing them."}]}
-        out = sb.bash(cmd)
+        out, inj = _injection_guard(sb.bash(cmd), stall)   # defang untrusted target output
         fp["tool_calls"] += 1
         err = _is_unproductive(out)
         if err:
@@ -92,7 +93,7 @@ def _server(sb):
             endpoint_errs[p] = endpoint_errs[p] + 1 if err else 0
         return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)
                              + _decoy_nudge(out) + _waf_nudge(out, stall)
-                             + _rate_nudge(out, stall)}]}
+                             + _rate_nudge(out, stall) + inj}]}
 
     return create_sdk_mcp_server(name="ctf", version="1.0", tools=[sandbox_bash]), fp
 

@@ -28,7 +28,8 @@ from claude_agent_sdk import (query, ClaudeAgentOptions, tool, create_sdk_mcp_se
 from config import MODEL
 from flag import find_flag, is_correct
 from specialists import SPECIALISTS
-from solver import _knowledge_server, _block_text, _decoy_nudge, _waf_nudge, _rate_nudge
+from solver import (_knowledge_server, _block_text, _decoy_nudge, _waf_nudge, _rate_nudge,
+                    _injection_guard)
 from sandbox import make_sandbox
 from recon import recon, brief_text
 
@@ -64,9 +65,9 @@ def _orchestrator_servers(sb, blackboard, counters):
     @tool("sandbox_bash", "Run a shell command in the shared sandbox (recon/verify)",
           {"command": str})
     async def sandbox_bash(args):
-        out = sb.bash(args.get("command", ""))
+        out, inj = _injection_guard(sb.bash(args.get("command", "")), waf_state)
         return {"content": [{"type": "text", "text": out + _decoy_nudge(out)
-                             + _waf_nudge(out, waf_state) + _rate_nudge(out, waf_state)}]}
+                             + _waf_nudge(out, waf_state) + _rate_nudge(out, waf_state) + inj}]}
 
     @tool("record_artifact",
           "Save a discovered artifact (token/key/credential/internal-url/role) to the "
