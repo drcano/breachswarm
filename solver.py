@@ -15,7 +15,9 @@ create_sdk_mcp_server / query API.
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +28,8 @@ from claude_agent_sdk import (
 )
 
 from flag import find_flag, is_correct, is_near_miss, DEFAULT_FLAG_RE, _is_placeholder
-from recon import recon, brief_text
+from recon import recon, brief_text, _web_recon
+from scratchpad import Scratchpad, netloc_of
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
 from writeup import generate, save_audit
@@ -272,19 +275,70 @@ def _blind_extract(sb, args) -> str:
     return sb.bash(f"echo {b64} | base64 -d | python3 -")
 
 
-def _sandbox_server(sb):
+# Staged recon: pull host:port surfaces the agent just touched out of its command/output.
+_URL_RE = re.compile(r'https?://([^/\s"\'`)<>\]]+)')
+
+
+def _netlocs(text: str) -> set[str]:
+    return {n for n in _URL_RE.findall(text or "") if n}
+
+
+def _digest(brief: str) -> tuple[str, str, list[str]]:
+    """Compress a recon brief into (tech, waf, endpoints) for the scratchpad."""
+    tech = ""
+    m = re.search(r'(?im)^\s*(server|x-powered-by):.*$', brief or "")
+    if m:
+        tech = m.group(0).strip()
+    wm = re.search(r'WAF signal:\s*(\S+)', brief or "")
+    waf = wm.group(1) if wm else ""
+    eps = re.findall(r'\b(?:200|201|301|302|401|403|405|500)\s+(/\S+)', brief or "")
+    return tech, waf, sorted(set(eps))[:8]
+
+
+def _staged_recon(sb, sp: Scratchpad, cmd: str, out: str, cap: int, lean: bool) -> str:
+    """Auto-fire recon on any NEW attack surface (host:port) the agent reached, so deeper
+    stages of a chain aren't improvised. Deterministic, deduped per surface, capped. Writes
+    findings to the shared scratchpad and returns the brief to append to the tool result."""
+    extra = ""
+    for nl in sorted(_netlocs(cmd) | _netlocs(out)):
+        if sp.has_surface(nl) or len(sp.surfaces) >= cap:
+            continue
+        sp.add_surface(nl)                      # reserve first: never re-recon on failure
+        brief = _web_recon(sb, f"http://{nl}", lean=lean)
+        tech, waf, eps = _digest(brief)
+        sp.add_surface(nl, tech=tech, waf=waf, endpoints=eps)
+        extra += (f"\n\n[new attack surface {nl} — auto-recon before you improvise]\n{brief}")
+    return extra
+
+
+def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = True):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
-    Wraps each result with the dead-end detector + decoy feedback + WAF-evasion nudge.
-    Also exposes `blind_extract`, an executable exploit primitive for blind data reads."""
+    Wraps each result with the dead-end detector + decoy/WAF/rate nudges, AUTO-FIRES staged
+    recon on any new surface, and keeps a shared scratchpad (surfaces + confirmed facts) live
+    in context so the agent infers from what it already scraped instead of re-deriving.
+    Also exposes `blind_extract` (blind-read primitive) and `note` (record a confirmed fact)."""
     stall = {"window": [], "cooldown": 0}
 
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
           {"command": str})
     async def sandbox_bash(args):
         out = sb.bash(args["command"])
-        return {"content": [{"type": "text", "text": out + _stall_nudge(out, stall)
-                             + _decoy_nudge(out) + _waf_nudge(out, stall)
-                             + _rate_nudge(out, stall)}]}
+        extra = (_stall_nudge(out, stall) + _decoy_nudge(out) + _waf_nudge(out, stall)
+                 + _rate_nudge(out, stall)
+                 + _staged_recon(sb, sp, args["command"], out, recon_cap, recon_lean))
+        if sp.changed():
+            extra += "\n\n[scratchpad — reuse this, don't re-derive]\n" + sp.summary()
+        return {"content": [{"type": "text", "text": out + extra}]}
+
+    @tool("note",
+          "Record a CONFIRMED fact to the shared scratchpad so later steps and deeper chain "
+          "stages reuse it instead of re-deriving it (e.g. key='param' value='q'; "
+          "key='encode_depth' value='3'; key='admin_token' value='ey...'; key='valid_ids' "
+          "value='1-9'). Write a fact the moment you confirm it.",
+          {"key": str, "value": str})
+    async def note(args):
+        sp.note(args.get("key", ""), args.get("value", ""))
+        return {"content": [{"type": "text", "text": "noted.\n" + sp.summary()}]}
 
     @tool("blind_extract",
           "Extract a secret through a CONFIRMED boolean-blind oracle in ONE call: it runs "
@@ -300,7 +354,7 @@ def _sandbox_server(sb):
         return {"content": [{"type": "text", "text": _blind_extract(sb, args)}]}
 
     return create_sdk_mcp_server(name="ctf", version="0.1",
-                                 tools=[sandbox_bash, blind_extract])
+                                 tools=[sandbox_bash, blind_extract, note])
 
 
 def _decompiler_server(sb):
@@ -377,6 +431,13 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
         brief = recon(sb, ch.prompt)
         spec = route(ch.category or brief["suggested"])
 
+        # Shared state model for the whole run: seed it with the perimeter surface recon
+        # already mapped, so staged recon doesn't re-probe it and the agent starts stateful.
+        sp = Scratchpad()
+        if init_nl := next(iter(_netlocs(ch.prompt)), ""):
+            tech, waf, eps = _digest(brief_text(brief))
+            sp.add_surface(init_nl, tech=tech, waf=waf, endpoints=eps)
+
         found, turns, cost, thoughts = None, 0, None, []
         usages = []  # raw ResultMessage.model_usage for token-based costing (A/B parity)
         # Per-AssistantMessage token tally — captured even when we early-exit on the flag
@@ -402,8 +463,10 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 break
 
         if not found:
-            servers = {"ctf": _sandbox_server(sb)}
-            tools = ["mcp__ctf__sandbox_bash", "mcp__ctf__blind_extract"]
+            recon_lean = os.getenv("RECON_DEPTH", "lean") != "full"
+            recon_cap = int(os.getenv("RECON_MAX_SURFACES", "6"))
+            servers = {"ctf": _sandbox_server(sb, sp, recon_cap, recon_lean)}
+            tools = ["mcp__ctf__sandbox_bash", "mcp__ctf__blind_extract", "mcp__ctf__note"]
             if os.getenv("CTF_KB", "1") != "0":   # RAG on-demand tool (ablation: CTF_KB=0)
                 servers["kb"] = _knowledge_server()
                 tools.append("mcp__kb__search_knowledge")
@@ -460,6 +523,7 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
     audit_path = out / "audit.jsonl"
     writeup_path = out / "writeup.md"
     save_audit(audit_path, trace)
+    (out / "scratchpad.json").write_text(json.dumps(sp.dump(), indent=2, default=str))
     writeup_path.write_text(await generate(ch.name, ch.prompt, trace, solved, found))
     from pricing import summarize
     usage = summarize(usages)

@@ -4,7 +4,9 @@ Run: ./.venv/bin/python test_ctf_agent.py
 from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
-from solver import _is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge
+from solver import (_is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge,
+                    _staged_recon, _digest)
+from scratchpad import Scratchpad, netloc_of
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
 from audit_chain import AuditChain, verify as audit_verify
@@ -124,6 +126,37 @@ def test_rate_nudge():
     assert "back off" in n and "429" in n and "sleep" in n
     assert _rate_nudge("429 again", st) == ""            # one-shot per run
     assert _rate_nudge("HTTP/1.1 200 OK", {}) == ""      # clean response, no fire
+
+
+def test_scratchpad_and_staged_recon():
+    # scratchpad: dirty-once, records surfaces + facts, renders, dedups the dirty flag
+    sp = Scratchpad()
+    assert sp.changed() and not sp.changed()
+    sp.note("param", "q"); sp.note("encode_depth", "3")
+    assert "param = q" in sp.summary() and sp.changed()
+    assert netloc_of("http://169.254.169.254/latest/meta-data/") == "169.254.169.254"
+
+    # staged recon: a NEW surface auto-fires deterministic recon ONCE, records it, then dedups
+    class FakeSB:
+        def __init__(self): self.calls = 0
+        def bash(self, cmd):
+            self.calls += 1
+            return "server: nginx\n  WAF signal: cloudflare\n  200  /admin\n  403  /internal"
+    sb = FakeSB()
+    extra = _staged_recon(sb, sp, "curl http://10.0.0.9:8080/x", "", cap=6, lean=True)
+    assert "new attack surface 10.0.0.9:8080" in extra and sb.calls == 1
+    s = sp.surfaces["10.0.0.9:8080"]
+    assert s["waf"] == "cloudflare" and "/admin" in s["endpoints"]
+    assert _staged_recon(sb, sp, "curl http://10.0.0.9:8080/y", "", 6, True) == "" and sb.calls == 1
+    # cap: never exceed the surface budget (footprint control)
+    full = Scratchpad()
+    for i in range(6):
+        full.add_surface(f"h{i}:80")
+    sb2 = FakeSB()
+    assert _staged_recon(sb2, full, "curl http://new:80/", "", cap=6, lean=True) == "" and sb2.calls == 0
+    # digest pulls tech/waf/endpoints out of a recon brief
+    tech, waf, eps = _digest("Server: Apache\n  WAF signal: akamaighost\n  200  /api\n  301  /login")
+    assert "Apache" in tech and waf == "akamaighost" and eps == ["/api", "/login"]
 
 
 def test_audit_chain():

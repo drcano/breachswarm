@@ -11,7 +11,13 @@ _COMMON = (
     "When you print the flag, reproduce its exact canonical format, including the "
     "exact case of the prefix (e.g. picoCTF{...}, never PICOCTF{...}). "
     "When unsure how to exploit or escalate a vuln class, call the "
-    "search_knowledge tool for a technique playbook before improvising."
+    "search_knowledge tool for a technique playbook before improvising.\n"
+    "SHARED STATE (leverage — do less, stay quieter): a scratchpad of confirmed facts and "
+    "already-reconned surfaces is kept live in your context. The MOMENT you confirm a fact "
+    "(an injectable param, an encoding depth, valid ids, a token/role/credential), record it "
+    "with the note tool so later steps and deeper chain stages reuse it instead of you "
+    "re-deriving it. When you reach a NEW host:port, recon fires automatically and appends a "
+    "brief — read it and build on it; do not re-probe a surface the scratchpad already maps."
 )
 
 SPECIALISTS: dict[str, str] = {

@@ -63,15 +63,21 @@ _PROBES = {
 }
 
 
-def _web_recon(sb, url: str) -> str:
+def _web_recon(sb, url: str, lean: bool = False) -> str:
     """Best-in-class deterministic web enumeration — know what the target IS before
     exploiting. Systematic, ~one focused pass (not a spray): tech fingerprint, the
     live endpoint surface (status-coded), forms/params, well-known files, and API
     routes mined from linked JS. Hands the specialist a map so it targets, not flails.
+
+    lean=True: ASSASSIN mode for STAGED re-fires on a new surface deeper in a chain —
+    only the two free/passive fetches (fingerprint + WAF from headers, body mining for
+    forms/params/linked endpoints). Skips the ~26-request well-known/endpoint brute-loops
+    so re-reconning every surface of a chain stays quiet (~2 requests, not ~26).
     """
     u = url.rstrip("/")
     cmd = rf"""
 U="{u}"
+LEAN="{'1' if lean else ''}"
 echo "== fingerprint (Server / framework / cookies) =="
 HDR=$(curl -sSi -m 8 "$U/" 2>/dev/null)
 echo "$HDR" | grep -iE '^(server|x-powered-by|x-aspnet|x-generator|via|set-cookie|content-type):' | head -12
@@ -86,6 +92,7 @@ echo "$H" | grep -oiE '<form[^>]*action="[^"]*"[^>]*>|name="[^"]+"|<!--.*-->' | 
 # mine any /path tokens mentioned anywhere in the body (catches text/JSON endpoint lists)
 echo "$H" | grep -oiE '/[a-zA-Z0-9_/]{2,40}' | sort -u | head -25
 echo "$H" | grep -oiE '(href|src)="[^"]+"' | sed -E 's/.*="([^"]+)".*/\1/' | grep -viE '\.(css|png|jpg|svg|ico|woff)' | sort -u | head -25
+if [ -z "$LEAN" ]; then   # active enumeration — skipped on staged (assassin) re-fires
 echo "== well-known / sensitive files (status) =="
 for p in robots.txt sitemap.xml .well-known/security.txt .git/config .env package.json composer.json swagger.json openapi.json api-docs; do
   c=$(curl -s -o /dev/null -w "%{{http_code}}" -m 6 "$U/$p"); [ "$c" != "404" ] && echo "  $c  /$p"; done
@@ -97,6 +104,7 @@ for js in $(echo "$H" | grep -oiE 'src="[^"]+\.js"' | sed -E 's/src="([^"]+)".*/
   case "$js" in http*) J="$js";; /*) J="$U$js";; *) J="$U/$js";; esac
   curl -s -m 6 "$J" 2>/dev/null | grep -oiE '"/(api|rest|v[0-9])[a-zA-Z0-9_/-]*"|/api/[a-zA-Z0-9_/-]+' | tr -d '"' | sort -u | head -20
 done
+fi
 """
     return sb.bash(cmd)
 
