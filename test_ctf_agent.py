@@ -6,7 +6,7 @@ from recon import _classify
 from specialists import route, SPECIALISTS
 from solver import (_is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge,
                     _staged_recon, _digest, _injection_guard, _blind_probe_nudge, _spray_nudge,
-                    _diy_nudge)
+                    _diy_nudge, _auto_blind, _present_state)
 from scratchpad import Scratchpad, netloc_of
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
@@ -200,6 +200,33 @@ def test_diy_nudge():
     # a plain non-HTTP script or normal command is fine
     assert _diy_nudge("python3 solve.py", {}) == ""
     assert _diy_nudge("curl -s http://t/api/me", {}) == ""
+
+
+def test_auto_blind():
+    assert _present_state('{"products":[{"id":1}]}') is True
+    assert _present_state('{"products":[]}') is False
+    assert _present_state("plain text") is None
+
+    class FakeSB:
+        def __init__(self): self.ran = 0
+        def bash(self, cmd, timeout=None):
+            self.ran += 1
+            return "BLIND_EXTRACT_OK depth=3 reqs=200\nRECOVERED: flag{auto_pwn}"
+    sb, st = FakeSB(), {}
+    U = "http://t/api/search"
+    present = '{"products":[{"id":1,"name":"Widget"}]}'
+    empty = '{"products":[]}'
+    # 3 probes establish the two-state oracle but don't fire yet (needs >=4 hits)
+    assert _auto_blind(sb, f"curl '{U}?q=1'", present, st) == ""
+    assert _auto_blind(sb, f"curl '{U}?q=0'", empty, st) == ""
+    assert _auto_blind(sb, f"curl '{U}?q=2'", present, st) == ""
+    assert sb.ran == 0
+    # 4th probe on the confirmed oracle auto-runs blind_extract and injects the recovered flag
+    out = _auto_blind(sb, f"curl '{U}?q=0'", empty, st)
+    assert "auto-exploit" in out and "flag{auto_pwn}" in out and sb.ran == 1
+    assert "Widget" in out                                   # true-marker: token in TRUE not FALSE
+    # fires only once per run
+    assert _auto_blind(sb, f"curl '{U}?q=1'", present, st) == "" and sb.ran == 1
 
 
 def test_injection_guard():
