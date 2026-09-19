@@ -21,7 +21,7 @@ PORT = 5099
 class HostSB:
     """Minimal sandbox shim: run the primitive's script on the host (it only needs
     python3 + base64 + urllib, all present) so it hits our in-process target."""
-    def bash(self, cmd: str) -> str:
+    def bash(self, cmd: str, timeout=None) -> str:
         return subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
                               timeout=180).stdout
 

@@ -5,7 +5,8 @@ from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
 from solver import (_is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge,
-                    _staged_recon, _digest, _injection_guard, _blind_probe_nudge, _spray_nudge)
+                    _staged_recon, _digest, _injection_guard, _blind_probe_nudge, _spray_nudge,
+                    _diy_nudge)
 from scratchpad import Scratchpad, netloc_of
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
@@ -184,6 +185,21 @@ def test_spray_nudge():
     assert _spray_nudge("curl -s http://t/api/me", {}) == ""
     # once blind_extract is used, stop nudging
     assert _spray_nudge(spray, {"blind_used": True}) == ""
+
+
+def test_diy_nudge():
+    st = {}
+    # writing/backgrounding a DIY HTTP extraction script -> nudge once to the primitive
+    diy = "cat > /tmp/find3.py <<'PY'\nimport requests\nfor p in words: requests.get(base)\nPY"
+    n = _diy_nudge(diy, st)
+    assert "reinvent the primitive" in n and "blind_extract" in n
+    assert _diy_nudge(diy, st) == ""                              # one-shot
+    assert _diy_nudge("nohup python3 /tmp/x.py & # http://t", {}) != ""   # backgrounding a script
+    # our own primitive invocation must NOT be flagged as DIY
+    assert _diy_nudge("echo AAAA | base64 -d | python3 -", {}) == ""
+    # a plain non-HTTP script or normal command is fine
+    assert _diy_nudge("python3 solve.py", {}) == ""
+    assert _diy_nudge("curl -s http://t/api/me", {}) == ""
 
 
 def test_injection_guard():

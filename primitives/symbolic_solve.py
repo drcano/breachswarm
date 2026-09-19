@@ -91,4 +91,4 @@ def run(sb, args: dict) -> str:
     params = {"binary": binary, "find": args["find"], "avoid": args.get("avoid") or "",
               "stdin_len": int(args.get("stdin_len") or 32), "argv": bool(args.get("argv"))}
     b64 = base64.b64encode(_script(params).encode()).decode()
-    return sb.bash(f"echo {b64} | base64 -d | python3 -")
+    return sb.bash(f"echo {b64} | base64 -d | python3 -", timeout=300)

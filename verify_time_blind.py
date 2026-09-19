@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     class HostSB:
         """Run the primitive's script on the host (needs only python3 + base64 + urllib)."""
-        def bash(self, cmd: str) -> str:
+        def bash(self, cmd: str, timeout=None) -> str:
             return subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
                                   timeout=180).stdout
 

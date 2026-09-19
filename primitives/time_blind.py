@@ -144,4 +144,4 @@ def run(sb, args: dict) -> str:
                                  .replace("{val}", "%d"))
     script = _script(params)
     b64 = base64.b64encode(script.encode()).decode()
-    return sb.bash(f"echo {b64} | base64 -d | python3 -")
+    return sb.bash(f"echo {b64} | base64 -d | python3 -", timeout=300)

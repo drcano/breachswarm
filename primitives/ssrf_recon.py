@@ -120,4 +120,4 @@ def run(sb, args: dict) -> str:
     if args.get("reflect_re"):
         params["reflect_re"] = args["reflect_re"]
     b64 = base64.b64encode(_script(params).encode()).decode()
-    return sb.bash(f"echo {b64} | base64 -d | python3 -")
+    return sb.bash(f"echo {b64} | base64 -d | python3 -", timeout=180)

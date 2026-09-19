@@ -274,7 +274,7 @@ def _blind_extract(sb, args) -> str:
         "encode_depth": args.get("encode_depth") or 1,
         "delay": args.get("delay") or 0.4})
     b64 = base64.b64encode(script.encode()).decode()
-    return sb.bash(f"echo {b64} | base64 -d | python3 -")
+    return sb.bash(f"echo {b64} | base64 -d | python3 -", timeout=300)
 
 
 # Staged recon: pull host:port surfaces the agent just touched out of its command/output.
@@ -361,6 +361,30 @@ _BLIND_PROBE_RE = re.compile(
     r"substr\(|ascii\(|\bunion\b|\bselect\b|\bsleep\(|\bpg_sleep\(|1\s*=\s*1|\|\||&&|%7c%7c|chr\(",
     re.I)
 
+# Don't-reinvent-the-primitive: the frontier run's real failure — the agent WROTE ITS OWN
+# extraction/fuzz scripts (cat > find3.py; nohup python …) and polled them with `sleep 58; grep`
+# for 30+ min, never calling blind_extract (which the 60s timeout also silently broke — now
+# fixed). Detect DIY HTTP scripting/backgrounding and point it at the primitive.
+_DIY_RE = re.compile(r"cat\s*>\s*\S*\.py|\bnohup\b|python3?\s+-\s*<<|<<\s*['\"]?PY\b", re.I)
+_HTTP_RE = re.compile(r"requests|urllib|https?://", re.I)
+
+
+def _diy_nudge(cmd: str, state: dict) -> str:
+    if state.get("blind_used") or state.get("diy_nudged"):
+        return ""
+    c = cmd or ""
+    if "base64 -d" in c:                       # our own primitive invocation, not DIY
+        return ""
+    if _DIY_RE.search(c) and _HTTP_RE.search(c):
+        state["diy_nudged"] = True
+        return ("\n\n[don't reinvent the primitive] you're writing/running your own HTTP script "
+                "(and maybe backgrounding it and polling with sleep). STOP — an executable "
+                "primitive already does this PACED, in ONE call, and is allowed to run long: "
+                "blind_extract (boolean-blind read), time_blind (timing oracle), jwt_forge (JWT "
+                "attacks), ssrf_recon (map internal via SSRF), symbolic_solve (crackme). Call the "
+                "matching primitive with the param/URL you found instead of hand-rolling it.")
+    return ""
+
 
 def _spray_nudge(cmd: str, state: dict) -> str:
     """Handcuffed traces showed the real failure on WAF'd blind targets: the agent found the
@@ -412,7 +436,7 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
         out, inj = _injection_guard(sb.bash(args["command"]), stall)  # defang untrusted output
         extra = (_stall_nudge(out, stall) + _decoy_nudge(out) + _waf_nudge(out, stall)
                  + _rate_nudge(out, stall) + inj + _blind_probe_nudge(args["command"], stall)
-                 + _spray_nudge(args["command"], stall)
+                 + _spray_nudge(args["command"], stall) + _diy_nudge(args["command"], stall)
                  + _staged_recon(sb, sp, args["command"], out, recon_cap, recon_lean))
         if sp.changed():
             extra += "\n\n[scratchpad — reuse this, don't re-derive]\n" + sp.summary()

@@ -46,13 +46,14 @@ class _Base:
 class LocalSandbox(_Base):
     """Runs on the host. Unsafe for untrusted code — see module docstring."""
 
-    def bash(self, command: str) -> str:
+    def bash(self, command: str, timeout: int | None = None) -> str:
+        t = timeout or self.timeout
         try:
             p = subprocess.run(["bash", "-lc", command], cwd=self.workdir,
-                               capture_output=True, text=True, timeout=self.timeout)
+                               capture_output=True, text=True, timeout=t)
             out = (p.stdout or "") + (p.stderr or "")
         except subprocess.TimeoutExpired:
-            out = f"[timeout after {self.timeout}s]"
+            out = f"[timeout after {t}s]"
         return self._log(command, out)
 
 
@@ -93,15 +94,20 @@ class DockerSandbox(_Base):
         )
         return self
 
-    def bash(self, command: str) -> str:
+    def bash(self, command: str, timeout: int | None = None) -> str:
+        # Per-call override: normal agent commands stay at the snappy default (60s), but the
+        # exploit primitives run PACED extractions (~100-250s for a long blind flag) that must
+        # be allowed to finish — the 60s cap silently killed them and drove the agent to a
+        # background-nohup-and-poll anti-pattern instead of just calling the primitive.
+        t = timeout or self.timeout
         try:
             p = subprocess.run(
                 ["docker", "exec", self.name, "bash", "-lc", command],
-                capture_output=True, text=True, timeout=self.timeout,
+                capture_output=True, text=True, timeout=t,
             )
             out = (p.stdout or "") + (p.stderr or "")
         except subprocess.TimeoutExpired:
-            out = f"[timeout after {self.timeout}s]"
+            out = f"[timeout after {t}s]"
         return self._log(command, out)
 
     def __exit__(self, *exc):
