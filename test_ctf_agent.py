@@ -5,7 +5,7 @@ from flag import find_flag, is_correct, is_near_miss, _is_placeholder
 from recon import _classify
 from specialists import route, SPECIALISTS
 from solver import (_is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge,
-                    _staged_recon, _digest, _injection_guard, _blind_probe_nudge)
+                    _staged_recon, _digest, _injection_guard, _blind_probe_nudge, _spray_nudge)
 from scratchpad import Scratchpad, netloc_of
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
@@ -169,6 +169,21 @@ def test_blind_probe_nudge():
     assert _blind_probe_nudge(probe, st2) == "" and _blind_probe_nudge(probe, st2) == ""
     # benign recon must not trip it
     assert _blind_probe_nudge("curl -s http://t/api/health", {}) == ""
+
+
+def test_spray_nudge():
+    # a big param-name enumeration loop -> nudge once to inject through the known param instead
+    spray = ("for p in q query name product search pid item sku category cat filter term keyword; "
+             "do curl -s \"http://t/api/search?$p=1\"; done")
+    st = {}
+    n = _spray_nudge(spray, st)
+    assert "stop spraying" in n and "blind_extract" in n
+    assert _spray_nudge(spray, st) == ""                       # one-shot
+    # a small loop or a normal command must not trip it
+    assert _spray_nudge("for i in 1 2 3; do curl http://t/?id=$i; done", {}) == ""
+    assert _spray_nudge("curl -s http://t/api/me", {}) == ""
+    # once blind_extract is used, stop nudging
+    assert _spray_nudge(spray, {"blind_used": True}) == ""
 
 
 def test_injection_guard():

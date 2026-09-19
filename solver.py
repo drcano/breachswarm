@@ -362,6 +362,25 @@ _BLIND_PROBE_RE = re.compile(
     re.I)
 
 
+def _spray_nudge(cmd: str, state: dict) -> str:
+    """Handcuffed traces showed the real failure on WAF'd blind targets: the agent found the
+    injectable param, misjudged it 'a validated decoy, not injectable', and burned its budget
+    WORDLIST-SPRAYING parameter names (`for p in q query name sku ...`) hunting a 'real' one.
+    Fire once on a big enumeration loop: stop spraying, inject through the param you already have."""
+    if state.get("blind_used") or state.get("spray_nudged"):
+        return ""
+    m = re.search(r'\bfor\s+\w+\s+in\s+([^;]+?);', cmd or "")
+    if m and ("curl" in cmd or "http" in cmd) and len(m.group(1).split()) >= 8:
+        state["spray_nudged"] = True
+        return ("\n\n[stop spraying] you're wordlist-enumerating many candidates in one loop — "
+                "noisy and rarely the bottleneck. You already have the endpoint and its parameter "
+                "from recon / the index page. A param that returns a two-state (present vs empty) "
+                "response IS your oracle even if valid ids just echo a record — do NOT dismiss it "
+                "as a decoy. Point blind_extract at it (`?param=0||{cond}`) to CONFIRM injectability "
+                "and extract, instead of hunting for a different parameter.")
+    return ""
+
+
 def _blind_probe_nudge(cmd: str, state: dict) -> str:
     if state.get("blind_used") or state.get("blind_nudged"):
         return ""
@@ -393,6 +412,7 @@ def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = T
         out, inj = _injection_guard(sb.bash(args["command"]), stall)  # defang untrusted output
         extra = (_stall_nudge(out, stall) + _decoy_nudge(out) + _waf_nudge(out, stall)
                  + _rate_nudge(out, stall) + inj + _blind_probe_nudge(args["command"], stall)
+                 + _spray_nudge(args["command"], stall)
                  + _staged_recon(sb, sp, args["command"], out, recon_cap, recon_lean))
         if sp.changed():
             extra += "\n\n[scratchpad — reuse this, don't re-derive]\n" + sp.summary()
