@@ -191,6 +191,12 @@ def test_scratchpad_and_staged_recon():
     s = sp.surfaces["10.0.0.9:8080"]
     assert s["waf"] == "cloudflare" and "/admin" in s["endpoints"]
     assert _staged_recon(sb, sp, "curl http://10.0.0.9:8080/y", "", 6, True) == "" and sb.calls == 1
+    # loopback / unspecified self-references (the Werkzeug startup banner) are NOT new surfaces
+    sb3 = FakeSB()
+    for junk in ("http://127.0.0.1:5000/", "http://localhost:5000/", "http://0.0.0.0:5000/",
+                 "http://[::1]:5000/"):
+        assert _staged_recon(sb3, sp, f"curl {junk}", "", 6, True) == ""
+    assert sb3.calls == 0, "loopback/unspecified hosts must not trigger staged recon"
     # cap: never exceed the surface budget (footprint control)
     full = Scratchpad()
     for i in range(6):

@@ -279,6 +279,8 @@ def _blind_extract(sb, args) -> str:
 
 # Staged recon: pull host:port surfaces the agent just touched out of its command/output.
 _URL_RE = re.compile(r'https?://([^/\s"\'`)<>\]]+)')
+# loopback / unspecified / link-local hosts are never a new directly-reachable surface
+_LOOPBACK_RE = re.compile(r'^\[?(::1|127\.|0\.0\.0\.0|localhost)|^169\.254\.', re.I)
 
 
 def _netlocs(text: str) -> set[str]:
@@ -303,7 +305,10 @@ def _staged_recon(sb, sp: Scratchpad, cmd: str, out: str, cap: int, lean: bool) 
     findings to the shared scratchpad and returns the brief to append to the tool result."""
     extra = ""
     for nl in sorted(_netlocs(cmd) | _netlocs(out)):
-        if sp.has_surface(nl) or len(sp.surfaces) >= cap:
+        # skip loopback / unspecified / link-local: these are the target's own startup banner
+        # (Werkzeug prints 127.0.0.1 + 0.0.0.0) or SSRF-only targets (use ssrf_recon), never a
+        # NEW directly-reachable surface — reconning them wastes turns and clutters state.
+        if _LOOPBACK_RE.match(nl) or sp.has_surface(nl) or len(sp.surfaces) >= cap:
             continue
         sp.add_surface(nl)                      # reserve first: never re-recon on failure
         brief = _web_recon(sb, f"http://{nl}", lean=lean)
@@ -581,26 +586,40 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
                 task = base if attempt == 0 else base + (
                     "\n\nYour previous attempt did NOT find the flag. Try a different "
                     "technique, tool, or encoding, and re-check your decoding step.")
-                async for msg in query(prompt=task, options=options):
-                    if isinstance(msg, AssistantMessage):
-                        turns += 1  # accumulates across attempts
-                        _acc(msg.usage)
-                    if isinstance(msg, ResultMessage):
-                        if msg.total_cost_usd is not None:
-                            cost = (cost or 0) + msg.total_cost_usd  # accumulate; 0.0 is real
-                        if msg.model_usage:
-                            usages.append(msg.model_usage)
-                    for block in getattr(msg, "content", []) or []:
-                        text = _block_text(block)
-                        if not text:
-                            continue
-                        # Tool output is already in sb.actions; keep only reasoning here.
-                        if isinstance(block, TextBlock):
-                            thoughts.append({"t": time.time(), "kind": "thought", "text": text})
-                        if hit := find_flag(text, ch.flag_pattern):
-                            found = hit
-                    if found:
-                        break  # auto-terminate once the flag appears
+                try:
+                    async for msg in query(prompt=task, options=options):
+                        if isinstance(msg, AssistantMessage):
+                            turns += 1  # accumulates across attempts
+                            _acc(msg.usage)
+                        if isinstance(msg, ResultMessage):
+                            if msg.total_cost_usd is not None:
+                                cost = (cost or 0) + msg.total_cost_usd  # accumulate; 0.0 is real
+                            if msg.model_usage:
+                                usages.append(msg.model_usage)
+                        for block in getattr(msg, "content", []) or []:
+                            text = _block_text(block)
+                            if not text:
+                                continue
+                            # Tool output is already in sb.actions; keep only reasoning here.
+                            if isinstance(block, TextBlock):
+                                thoughts.append({"t": time.time(), "kind": "thought", "text": text})
+                            if hit := find_flag(text, ch.flag_pattern):
+                                found = hit
+                        if found:
+                            break  # auto-terminate once the flag appears
+                except Exception:
+                    # solve() RAISES on max_turns by contract (run.py excludes those). But the
+                    # trace/scratchpad are the ONLY way to diagnose a hard failure — persist them
+                    # BEFORE re-raising so a turn-capped run isn't a black box (validation gap).
+                    outp = Path(ch.outdir or ch.workdir)
+                    try:
+                        save_audit(outp / "audit.jsonl",
+                                   sorted(sb.actions + thoughts, key=lambda e: e["t"]))
+                        (outp / "scratchpad.json").write_text(
+                            json.dumps(sp.dump(), indent=2, default=str))
+                    except Exception:
+                        pass
+                    raise
                 if found:
                     break
 
