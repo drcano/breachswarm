@@ -28,7 +28,7 @@ from claude_agent_sdk import (
 )
 
 from flag import find_flag, is_correct, is_near_miss, DEFAULT_FLAG_RE, _is_placeholder
-from recon import recon, brief_text, _web_recon
+from recon import recon, brief_text, _web_recon, profile_surface
 from scratchpad import Scratchpad, netloc_of
 from sandbox import make_sandbox
 from specialists import SPECIALISTS, route
@@ -306,8 +306,12 @@ def _staged_recon(sb, sp: Scratchpad, cmd: str, out: str, cap: int, lean: bool) 
         sp.add_surface(nl)                      # reserve first: never re-recon on failure
         brief = _web_recon(sb, f"http://{nl}", lean=lean)
         tech, waf, eps = _digest(brief)
-        sp.add_surface(nl, tech=tech, waf=waf, endpoints=eps)
-        extra += (f"\n\n[new attack surface {nl} — auto-recon before you improvise]\n{brief}")
+        prof = profile_surface(brief)
+        sp.add_surface(nl, tech=tech or prof["stack"], waf=waf, endpoints=eps,
+                       archetype=prof["archetype"], hunt=prof["hunt"], skip=prof["skip"])
+        extra += (f"\n\n[new attack surface {nl} — {prof['archetype']} — recon before you "
+                  f"improvise]\nhunt: {'; '.join(prof['hunt'])}\nskip: {'; '.join(prof['skip'])}"
+                  f"\n{brief}")
     return extra
 
 
@@ -435,8 +439,11 @@ async def solve(ch: Challenge, max_turns: int = 40, retries: int = 0) -> Result:
         # already mapped, so staged recon doesn't re-probe it and the agent starts stateful.
         sp = Scratchpad()
         if init_nl := next(iter(_netlocs(ch.prompt)), ""):
-            tech, waf, eps = _digest(brief_text(brief))
-            sp.add_surface(init_nl, tech=tech, waf=waf, endpoints=eps)
+            bt = brief_text(brief)
+            tech, waf, eps = _digest(bt)
+            prof = profile_surface(bt)
+            sp.add_surface(init_nl, tech=tech or prof["stack"], waf=waf, endpoints=eps,
+                           archetype=prof["archetype"], hunt=prof["hunt"], skip=prof["skip"])
 
         found, turns, cost, thoughts = None, 0, None, []
         usages = []  # raw ResultMessage.model_usage for token-based costing (A/B parity)

@@ -152,6 +152,68 @@ _CAT_QUERY = {
 }
 
 
+def _stack_from(b: str) -> str:
+    for k in ("werkzeug", "flask", "django", "express", "node", "php", "asp.net",
+              "spring", "rails", "gunicorn", "tomcat", "nginx", "apache"):
+        if k in b:
+            return k
+    return ""
+
+
+def profile_surface(brief: str) -> dict:
+    """Fingerprint -> target ARCHETYPE prior, the way a real operator picks a playbook before
+    touching anything (OWASP WSTG 'map before you probe'; ATT&CK Reconnaissance). Returns
+    {archetype, stack, hunt[], skip[]}: what this KIND of target is, the ranked techniques that
+    APPLY, and the ones to SKIP so we don't spray wordlists/LFI/CMS paths at a 4-route JSON API.
+    Advisory — a prior the agent holds loosely, not a gate; when the ranked tree is exhausted it
+    should widen out rather than treat 'skip' as forbidden."""
+    b = (brief or "").lower()
+    stack = _stack_from(b)
+
+    def prof(a, hunt, skip):
+        return {"archetype": a, "stack": stack, "hunt": hunt, "skip": skip}
+
+    if "graphql" in b:
+        return prof("GraphQL API",
+                    ["introspection {__schema}", "hidden queries/mutations, call unauth",
+                     "IDOR via node global ids", "alias batching to bypass rate limits"],
+                    ["REST/directory wordlist brute-force", "server-side template hunting",
+                     "CMS/WordPress paths"])
+    if any(s in b for s in ("wp-content", "wp-json", "wordpress", "drupal", "joomla",
+                            "x-generator", "x-drupal")):
+        return prof("CMS",
+                    ["plugin/theme version -> known CVEs", "xmlrpc.php abuse",
+                     "user enumeration (?author=/wp-json/wp/v2/users)", "weak/default admin creds"],
+                    ["custom-framework SSTI", "GraphQL introspection", "generic API mass-assignment"])
+    api = ("application/json" in b or "/api" in b or b.strip().startswith("{")
+           or '"error"' in b or '"data"' in b or '"message"' in b)
+    forms = "<form" in b
+    spa = ('id="root"' in b or 'id="app"' in b or "bundle.js" in b or "main." in b
+           or "__next" in b or "ng-app" in b)
+    if spa and api:
+        return prof("SPA + JSON API",
+                    ["the /api surface: IDOR/BOLA on object ids", "mass assignment (extra fields)",
+                     "auth/JWT & token handling", "CORS misconfig (credentialed wildcard)"],
+                    ["server-side template injection on pages", "directory brute-force for pages",
+                     "LFI on page params"])
+    if api and not forms:
+        return prof("REST-JSON API",
+                    ["IDOR/BOLA on every object id", "mass assignment (POST/PUT extra fields)",
+                     "JWT (alg:none / weak secret / kid)", "param injection SQLi/NoSQLi + WAF evasion",
+                     "rate-limit & business-logic abuse"],
+                    ["directory/wordlist brute-force", ".php/.env/CMS path spraying",
+                     "LFI file-read hunting", "reflected/stored XSS"])
+    if forms or stack in ("php", "flask", "django", "rails", "spring", "werkzeug"):
+        return prof("Server-rendered app",
+                    ["SQLi in forms/query params", "SSTI in reflected fields (name/email/report)",
+                     "LFI / path traversal", "file upload -> RCE", "auth/session flaws"],
+                    ["GraphQL introspection", "JWT alg-confusion", "API mass-assignment"])
+    return prof("Generic web",
+                ["map endpoints from links/JS first", "injection in any reflected param",
+                 "auth & access control", "known-CVE by fingerprint"],
+                ["blind wordlist spraying before the surface is mapped"])
+
+
 def _hint_queries(r: dict) -> list[str]:
     cat = r.get("suggested")
     if cat == "web":

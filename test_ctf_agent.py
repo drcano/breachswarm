@@ -128,6 +128,22 @@ def test_rate_nudge():
     assert _rate_nudge("HTTP/1.1 200 OK", {}) == ""      # clean response, no fire
 
 
+def test_target_profiler():
+    from recon import profile_surface
+    # a Citadel-like JSON API brief -> REST-JSON archetype that SUPPRESSES the wordlist spray
+    api = profile_surface("Server: Werkzeug/2.0\ncontent-type: application/json\n"
+                          "  200  /api/search\n  200  /api/debug")
+    assert api["archetype"] == "REST-JSON API"
+    assert any("brute-force" in s for s in api["skip"])          # don't dirbust a 4-route API
+    assert any("IDOR" in h for h in api["hunt"])
+    # server-rendered app -> hunts SSTI/LFI, not GraphQL/JWT
+    srv = profile_surface("Server: Apache PHP/8\n<form action='/login'>")
+    assert srv["archetype"] == "Server-rendered app" and any("SSTI" in h for h in srv["hunt"])
+    # graphql / cms get their own playbooks
+    assert profile_surface("POST /graphql\n{__schema}")["archetype"] == "GraphQL API"
+    assert profile_surface("<link href='/wp-content/x.css'>")["archetype"] == "CMS"
+
+
 def test_scratchpad_and_staged_recon():
     # scratchpad: dirty-once, records surfaces + facts, renders, dedups the dirty flag
     sp = Scratchpad()

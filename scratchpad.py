@@ -31,12 +31,15 @@ class Scratchpad:
     def has_surface(self, netloc: str) -> bool:
         return netloc in self.surfaces
 
-    def add_surface(self, netloc: str, tech: str = "", waf: str = "", endpoints=None) -> None:
+    def add_surface(self, netloc: str, tech: str = "", waf: str = "", endpoints=None,
+                    archetype: str = "", hunt=None, skip=None) -> None:
         if not netloc:
             return
-        self.surfaces[netloc] = {"tech": (tech or "").strip()[:200],
+        self.surfaces[netloc] = {"archetype": (archetype or "").strip()[:40],
+                                 "tech": (tech or "").strip()[:200],
                                  "waf": (waf or "").strip()[:80],
                                  "endpoints": list(endpoints or [])[:10],
+                                 "hunt": list(hunt or [])[:6], "skip": list(skip or [])[:6],
                                  "ts": round(time.time())}
         self._dirty = True
 
@@ -52,13 +55,24 @@ class Scratchpad:
         return d
 
     def summary(self) -> str:
+        """Lead with the TARGET ARCHITECTURE so the agent knows exactly what it is inside and
+        never reconstructs context from scratch — per surface: what it is, its stack/WAF/routes,
+        what to hunt, and what to skip. Then the confirmed facts to build on."""
         lines: list[str] = []
         if self.surfaces:
-            lines.append("surfaces (already reconned — reuse, don't re-probe):")
+            lines.append("target architecture (known — do NOT re-recon or reconstruct):")
             for nl, s in self.surfaces.items():
-                bits = [b for b in (s["tech"], (f"WAF:{s['waf']}" if s["waf"] else ""),
-                                    (" ".join(s["endpoints"]) if s["endpoints"] else "")) if b]
-                lines.append(f"  {nl}" + (": " + " | ".join(bits) if bits else ""))
+                head = f"  {nl}" + (f"  [{s['archetype']}]" if s.get("archetype") else "")
+                meta = [b for b in (s["tech"], (f"WAF:{s['waf']}" if s["waf"] else "")) if b]
+                if meta:
+                    head += "  " + " · ".join(meta)
+                lines.append(head)
+                if s["endpoints"]:
+                    lines.append("     endpoints: " + " ".join(s["endpoints"]))
+                if s.get("hunt"):
+                    lines.append("     hunt: " + "; ".join(s["hunt"]))
+                if s.get("skip"):
+                    lines.append("     skip (don't spray these here): " + "; ".join(s["skip"]))
         if self.facts:
             lines.append("facts (confirmed — build on these):")
             for k, v in self.facts.items():
@@ -73,12 +87,14 @@ def demo() -> None:
     sp = Scratchpad()
     assert sp.changed() and not sp.changed()          # dirty once, then quiet
     sp.add_surface("10.0.0.9:8080", tech="Server: nginx", waf="cloudflare",
-                   endpoints=["/admin", "/api"])
+                   endpoints=["/admin", "/api"], archetype="REST-JSON API",
+                   hunt=["IDOR/BOLA"], skip=["wordlist brute-force"])
     assert sp.has_surface("10.0.0.9:8080") and sp.changed()
     sp.note("param", "q"); sp.note("encode_depth", "3")
     assert sp.facts["encode_depth"] == "3" and sp.changed()
     s = sp.summary()
-    assert "10.0.0.9:8080" in s and "WAF:cloudflare" in s and "param = q" in s
+    assert "[REST-JSON API]" in s and "WAF:cloudflare" in s and "param = q" in s
+    assert "hunt: IDOR/BOLA" in s and "skip" in s and "architecture" in s
     assert netloc_of("http://169.254.169.254/latest/meta-data/") == "169.254.169.254"
     assert netloc_of("host:5000") == "host:5000"
     print("scratchpad.py ok")
