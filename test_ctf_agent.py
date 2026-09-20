@@ -6,7 +6,7 @@ from recon import _classify
 from specialists import route, SPECIALISTS
 from solver import (_is_unproductive, _stall_nudge, _decoy_nudge, _waf_nudge, _rate_nudge,
                     _staged_recon, _digest, _injection_guard, _blind_probe_nudge, _spray_nudge,
-                    _diy_nudge, _auto_blind, _present_state)
+                    _diy_nudge, _auto_blind, _present_state, _sandbox_server)
 from scratchpad import Scratchpad, netloc_of
 from pricing import cost_of, summarize
 from knowledge_base import KnowledgeBase
@@ -333,6 +333,15 @@ def test_safety_rails():
     assert guard_destructive("rm -rf /", True)[0] is True            # RoE authorizes destruction
     tok = canary_token("x")
     assert is_canary(tok) and not is_canary("nope")
+
+
+def test_sandbox_server_builds():
+    # regression: _sandbox_server(sb) with no scratchpad must work — recon_agents.py and
+    # stateful.py call it that way. A required `sp` broke both silently (dec8882).
+    class FakeSB:
+        def bash(self, *a, **k): return ""
+    _sandbox_server(FakeSB())                       # no sp -> fresh Scratchpad, must not raise
+    _sandbox_server(FakeSB(), Scratchpad())         # explicit sp (the solve path) still works
 
 
 def test_recon_classify():

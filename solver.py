@@ -476,13 +476,17 @@ def _auto_blind(sb, cmd: str, out: str, state: dict) -> str:
     return ""
 
 
-def _sandbox_server(sb, sp: Scratchpad, recon_cap: int = 6, recon_lean: bool = True,
-                    defang: bool = True):
+def _sandbox_server(sb, sp: Scratchpad | None = None, recon_cap: int = 6,
+                    recon_lean: bool = True, defang: bool = True):
     """Build an in-process MCP server exposing this challenge's sandbox as a tool.
     Wraps each result with the dead-end detector + decoy/WAF/rate nudges, AUTO-FIRES staged
     recon on any new surface, and keeps a shared scratchpad (surfaces + confirmed facts) live
     in context so the agent infers from what it already scraped instead of re-deriving.
-    Also exposes `blind_extract` (blind-read primitive) and `note` (record a confirmed fact)."""
+    Also exposes `blind_extract` (blind-read primitive) and `note` (record a confirmed fact).
+
+    sp defaults to a fresh per-server scratchpad, so callers that don't seed a shared one
+    (recon_agents, stateful) still work — the shared-state solve path passes its own."""
+    sp = sp if sp is not None else Scratchpad()
     stall = {"window": [], "cooldown": 0}
 
     @tool("sandbox_bash", "Run a shell command inside the challenge sandbox",
