@@ -1,6 +1,6 @@
 # Case Study — Deploying an Autonomous Security Agent Against an Unfamiliar Target
 
-*How ctf-agent goes from "here is a host you have never seen" to a client-ready
+*How breachswarm goes from "here is a host you have never seen" to a client-ready
 vulnerability report, and what it costs.*
 
 This is the deliverable an offensive-security team actually ships: not a solved

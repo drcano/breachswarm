@@ -1,4 +1,4 @@
-# Hunter Playbook — making ctf-agent operate like the best bug hunters
+# Hunter Playbook — making breachswarm operate like the best bug hunters
 
 Synthesized from 5 parallel research streams (2026-09-21): elite-hunter methodology, recon mastery,
 high-value bug classes + chaining, AI/autonomous SOTA (XBOW/Big Sleep/ZeroPath/Strix), and the

@@ -6,7 +6,7 @@ A multi-agent system that autonomously solves capture-the-flag (CTF) challenges,
 built on the Claude Agent SDK and benchmarked on InterCode-CTF. This report covers
 what was built, how it was measured, the results, and what was learned.
 
-Repo: `github.com/drcano/ctf-agent` · Companion visual doc: `docs/how-it-works.html`
+Repo: `github.com/drcano/breachswarm` · Companion visual doc: `docs/how-it-works.html`
 
 ---
 

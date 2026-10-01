@@ -1,4 +1,4 @@
-# ctf-agent — project context for Claude Code
+# breachswarm — project context for Claude Code
 
 Autonomous multi-agent offensive-security system on the Claude Agent SDK. Solves
 CTFs and runs authorized bug-bounty assessments. Portfolio piece for an FDE role.

@@ -2,7 +2,7 @@
 
 Goal: run realistic attacker techniques (so engagements surface real blind spots) while making
 it **impossible for the agent to act outside the authorized scope** and **impossible to hide
-what it did**. Realism inside a cage. This is the design for turning ctf-agent into a red-team /
+what it did**. Realism inside a cage. This is the design for turning breachswarm into a red-team /
 purple-team agent, and the boundary that keeps it legitimate.
 
 ## "The assassin cannot escape scope" — defense in depth

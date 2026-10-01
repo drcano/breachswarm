@@ -1,8 +1,15 @@
-# ctf-agent
+# breachswarm
+
+*Autonomous offensive-security agents that work a target until one of them breaches it.*
 
 An autonomous, multi-agent system that solves Capture-The-Flag challenges — and a
 foundation for real offensive-security work (bug bounty, security research). Built
 on the Claude Agent SDK.
+
+> **On the name:** today the architecture is an orchestrator routing each objective to a
+> category specialist (bounded concurrency). True parallel fan-out — many short-lived
+> solvers swarming one target, XBOW-style — is the roadmap the name points at, not a
+> finished claim. See `docs/hunter_playbook.md`.
 
 **An orchestrator routes each challenge to a category specialist, which drives real
 security tools inside an isolated sandbox until a flag appears — then writes up how
