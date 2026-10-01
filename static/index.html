@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CTF Agent — Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Matrix — refined: one phosphor-green accent, near-black ground, mono, minimal. */
+  :root{
+    --bg:#060a07; --surface:#0b110c; --surface-2:#0f160f; --ink:#c6e6cd;
+    --ink-2:#7fae8a; --ink-3:#4d6b55; --line:#18271b; --line-2:#243a29;
+    --accent:#3ef07f; --accent-dim:#1f8f4d; --glow:rgba(62,240,127,.35);
+    --ok:#3ef07f; --warn:#d7e04a; --bad:#ff5c6c;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--mono);
+    line-height:1.5;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
+  #rain{position:fixed;inset:0;z-index:0;opacity:.10;pointer-events:none}
+  header,main,.scrim,.drawer{position:relative;z-index:1}
+  a{color:var(--accent)}
+  ::selection{background:var(--accent-dim);color:#03170b}
+  header{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 82%,transparent);
+    backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 20px;
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:600;text-shadow:0 0 12px var(--glow)}
+  .brand .d{color:var(--accent)}
+  .stat{margin-left:auto;display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:.82rem}
+  .stat b{color:var(--accent);font-size:1.1rem}
+  .stat .lbl{color:var(--ink-3);display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);display:inline-block;margin-right:6px}
+  .dot.live{background:var(--ok);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  main{max-width:1100px;margin:0 auto;padding:20px}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px}
+  .panel h2{margin:0 0 12px;font-size:.95rem;font-family:var(--mono);color:var(--ink-2);
+    text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .form{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:.72rem;color:var(--ink-3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
+  select,input{background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);
+    border-radius:8px;padding:8px 10px;font-family:var(--mono);font-size:.85rem}
+  input[type=number]{width:76px}
+  button{background:var(--accent);color:#1b1205;border:none;border-radius:8px;padding:9px 20px;
+    font-family:var(--mono);font-weight:600;font-size:.85rem;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+  .tile{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--ink-3);
+    border-radius:10px;padding:11px 13px;cursor:pointer;transition:transform .08s}
+  .tile:hover{transform:translateY(-2px);border-color:var(--line-2)}
+  .tile.ok{border-left-color:var(--ok)} .tile.near{border-left-color:var(--warn)}
+  .tile.bad{border-left-color:var(--bad)} .tile.pend{border-left-color:var(--accent)}
+  .tile .n{font-family:var(--mono);font-size:.85rem;font-weight:500}
+  .tile .meta{font-size:.72rem;color:var(--ink-3);font-family:var(--mono);margin-top:4px;
+    display:flex;justify-content:space-between;gap:6px}
+  .tile .flag{font-family:var(--mono);font-size:.7rem;color:var(--ok);margin-top:6px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile .st{text-transform:uppercase;letter-spacing:.04em}
+  .st.ok{color:var(--ok)} .st.near{color:var(--warn)} .st.bad{color:var(--bad)} .st.pend{color:var(--accent)}
+  /* drawer */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:20}
+  .scrim.open{display:block}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(680px,94vw);background:var(--bg);
+    border-left:1px solid var(--line);z-index:21;transform:translateX(100%);transition:transform .2s;
+    display:flex;flex-direction:column}
+  .drawer.open{transform:none}
+  .drawer .dh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  .drawer .dh h3{margin:0;font-family:var(--mono);font-size:1rem}
+  .drawer .close{margin-left:auto;background:var(--surface-2);color:var(--ink);padding:6px 12px}
+  .drawer .body{overflow-y:auto;padding:18px 20px}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}
+  .tabs button{background:var(--surface-2);color:var(--ink-2);font-weight:500}
+  .tabs button.active{background:var(--accent);color:#1b1205}
+  .audit{font-family:var(--mono);font-size:.78rem}
+  .audit .cmd{color:var(--accent);margin-top:12px}
+  .audit .out{white-space:pre-wrap;color:var(--ink-2);background:var(--surface);
+    border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-top:4px;max-height:260px;overflow:auto}
+  .audit .think{color:var(--ink-3);font-style:italic;margin-top:10px}
+  .writeup{white-space:pre-wrap;font-size:.9rem;color:var(--ink-2);line-height:1.65}
+  .empty{color:var(--ink-3);font-size:.85rem;padding:20px 0}
+</style>
+</head>
+<body>
+<canvas id="rain"></canvas>
+<header>
+  <span class="brand">ctf<span class="d">-</span>agent <span style="color:var(--ink-3)">console</span></span>
+  <a href="/dashboard" style="color:var(--ink-3);text-decoration:none;font-size:.82rem;font-family:var(--mono)">dashboard →</a>
+  <div class="stat">
+    <span><span class="lbl">status</span><span id="status"><span class="dot"></span>idle</span></span>
+    <span><span class="lbl">solved</span><b id="s-solved">0</b>/<span id="s-total">0</span></span>
+    <span><span class="lbl">rate</span><b id="s-rate">—</b></span>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Launch a run</h2>
+    <div class="form">
+      <div class="field"><label>Category</label>
+        <select id="f-cat">
+          <option value="">all</option><option>crypto</option><option>forensics</option>
+          <option>rev</option><option>web</option><option>pwn</option><option value="misc">misc / general</option>
+        </select></div>
+      <div class="field"><label>Backend</label>
+        <select id="f-backend"><option>docker</option><option>local</option></select></div>
+      <div class="field"><label>Limit</label><input id="f-limit" type="number" value="8" min="1"></div>
+      <div class="field"><label>Max turns</label><input id="f-turns" type="number" value="15" min="1"></div>
+      <div class="field"><label>Concurrency</label><input id="f-conc" type="number" value="4" min="1"></div>
+      <div class="field"><label>Retries</label><input id="f-retry" type="number" value="0" min="0"></div>
+      <button id="run">▶ Run</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Challenges</h2>
+    <div class="grid" id="grid"><div class="empty">Loading…</div></div>
+  </div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="dh"><h3 id="d-name">—</h3><button class="close" id="d-close">✕ close</button></div>
+  <div class="body">
+    <div class="tabs"><button id="tab-w" class="active">Writeup</button><button id="tab-a">Audit trail</button></div>
+    <div id="d-writeup" class="writeup"></div>
+    <div id="d-audit" class="audit" hidden></div>
+  </div>
+</aside>
+
+<script>
+const $ = s => document.querySelector(s);
+const tiles = {};   // name -> element
+let stats = {solved:0, total:0};
+
+function statusEl(txt, live){ $("#status").innerHTML = `<span class="dot ${live?'live':''}"></span>${txt}`; }
+function updateStats(){ $("#s-solved").textContent = stats.solved; $("#s-total").textContent = stats.total;
+  $("#s-rate").textContent = stats.total ? Math.round(100*stats.solved/stats.total)+"%" : "—"; }
+
+function tile(name, cat){
+  let el = tiles[name];
+  if(!el){ el = document.createElement("div"); el.className="tile"; el.dataset.name=name;
+    el.onclick = ()=>openDrawer(name);
+    $("#grid").appendChild(el); tiles[name]=el; }
+  return el;
+}
+function renderTile(name, {status, specialist, turns, flag, cost}){
+  const el = tile(name);
+  const cls = {SOLVED:"ok", NEAR:"near", fail:"bad", solving:"pend"}[status] || "";
+  el.className = "tile " + (cls==="ok"?"ok":cls==="near"?"near":cls==="bad"?"bad":cls==="pend"?"pend":"");
+  el.innerHTML = `<div class="n">${name}</div>
+    <div class="meta"><span>${specialist||""}</span><span class="st ${cls}">${status}</span></div>
+    ${turns!=null?`<div class="meta"><span>${turns} turns</span><span>${cost?'$'+cost.toFixed(3):''}</span></div>`:""}
+    ${flag?`<div class="flag">${flag}</div>`:""}`;
+}
+
+async function loadChallenges(){
+  const cs = await (await fetch("/api/challenges")).json();
+  $("#grid").innerHTML = "";
+  cs.forEach(c => renderTile(c.name, {status: c.has_writeup?"·":"", specialist:c.specialist}));
+}
+
+$("#run").onclick = async () => {
+  const cfg = { category: $("#f-cat").value, backend: $("#f-backend").value,
+    limit: +$("#f-limit").value, max_turns:+$("#f-turns").value,
+    concurrency:+$("#f-conc").value, retries:+$("#f-retry").value };
+  const r = await fetch("/api/run", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(cfg)});
+  if(r.status===409){ alert("A run is already active."); return; }
+  $("#run").disabled = true; stats={solved:0,total:0}; updateStats();
+};
+
+const es = new EventSource("/api/events");
+es.onmessage = e => {
+  const ev = JSON.parse(e.data);
+  if(ev.type==="start"){ statusEl(`running ${ev.total}`, true); stats.total=ev.total; updateStats(); }
+  else if(ev.type==="solving"){ renderTile(ev.name, {status:"solving", specialist:""}); }
+  else if(ev.type==="result"){
+    const status = ev.solved?"SOLVED":(ev.near_miss?"NEAR":"fail");
+    renderTile(ev.name, {status, specialist:ev.specialist, turns:ev.turns, flag:ev.flag, cost:ev.cost_usd});
+    if(ev.solved) stats.solved++; updateStats();
+  }
+  else if(ev.type==="done"){ statusEl("done", false); $("#run").disabled=false; }
+  else if(ev.type==="error"){ /* tile already flips to fail via result */ }
+};
+
+// drawer
+async function openDrawer(name){
+  $("#d-name").textContent = name;
+  $("#scrim").classList.add("open"); $("#drawer").classList.add("open");
+  $("#d-writeup").textContent = "Loading…"; $("#d-audit").innerHTML="";
+  const d = await (await fetch("/api/challenge/"+encodeURIComponent(name))).json();
+  $("#d-writeup").textContent = d.writeup || "(no writeup yet — run this challenge)";
+  $("#d-audit").innerHTML = (d.audit||[]).map(a=>{
+    if(a.kind==="cmd") return `<div class="cmd">$ ${esc(a.command)}</div><div class="out">${esc(a.output||"")}</div>`;
+    if(a.kind==="thought") return `<div class="think">${esc(a.text||"")}</div>`;
+    if(a.kind==="flag") return `<div class="cmd">🚩 ${esc(a.text||"")}</div>`;
+    return "";
+  }).join("") || '<div class="empty">No audit trail yet.</div>';
+}
+function esc(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+$("#d-close").onclick = $("#scrim").onclick = () => {
+  $("#scrim").classList.remove("open"); $("#drawer").classList.remove("open"); };
+$("#tab-w").onclick = ()=>{ $("#tab-w").classList.add("active"); $("#tab-a").classList.remove("active");
+  $("#d-writeup").hidden=false; $("#d-audit").hidden=true; };
+$("#tab-a").onclick = ()=>{ $("#tab-a").classList.add("active"); $("#tab-w").classList.remove("active");
+  $("#d-audit").hidden=false; $("#d-writeup").hidden=true; };
+
+loadChallenges();
+
+// subtle matrix rain — low opacity, paused under reduced-motion
+(function(){
+  const cv = $("#rain"), ctx = cv.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let cols, drops, fs = 14;
+  const chars = "01ｱｶｻﾀﾅﾊﾏﾔﾗ<>[]{}#$%*+=".split("");
+  function resize(){ cv.width=innerWidth; cv.height=innerHeight;
+    cols = Math.floor(cv.width/fs); drops = Array(cols).fill(0).map(()=>Math.random()*-40); }
+  resize(); addEventListener("resize", resize);
+  function frame(){
+    ctx.fillStyle = "rgba(6,10,7,0.14)"; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.font = fs+"px IBM Plex Mono, monospace";
+    for(let i=0;i<cols;i++){
+      const c = chars[(Math.random()*chars.length)|0];
+      const x = i*fs, y = drops[i]*fs;
+      ctx.fillStyle = Math.random()>0.985 ? "#c6e6cd" : "#3ef07f";
+      ctx.fillText(c, x, y);
+      if(y>cv.height && Math.random()>0.975) drops[i]=0; else drops[i]++;
+    }
+  }
+  if(!reduce) setInterval(frame, 55); else { ctx.fillStyle="#060a07"; ctx.fillRect(0,0,cv.width,cv.height); }
+})();
+</script>
+</body>
+</html>

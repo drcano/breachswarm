@@ -1,0 +1,2 @@
+{"mode": "baseline", "name": "boss_app-baseline-1", "solved": false, "flag": null, "turns": 40, "cost_usd": null, "duration_s": 1067.4, "error": null, "app": "boss_app.py", "iter": 1, "time": 1789760391.250365}
+{"mode": "baseline", "name": "boss_app-baseline-2", "solved": false, "flag": null, "turns": 40, "cost_usd": null, "duration_s": 1010.2, "error": null, "app": "boss_app.py", "iter": 2, "time": 1789761401.442246}

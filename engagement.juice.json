@@ -1,0 +1,15 @@
+{
+  "program": "OWASP Juice Shop (own instance) — emulation dry-run",
+  "authorized": true,
+  "operator": "dante <realdantecano@gmail.com>",
+  "in_scope": ["172.17.0.2"],
+  "out_of_scope": [],
+  "rate_limit_rps": 8.0,
+  "expires": "2026-09-18T21:47:56Z",
+  "allowed_techniques": ["*"],
+  "loudness_budget_per_hour": 500,
+  "destructive": false,
+  "kill_switch": "/tmp/JUICE_STOP",
+  "deconfliction": "/Users/dante/dev/ctf-agent/redteam_runs/deconfliction.log",
+  "notes": "self-hosted emulation validation"
+}

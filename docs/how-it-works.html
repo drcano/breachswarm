@@ -1,0 +1,337 @@
+<title>CTF Agent</title>
+<meta name="description" content="A multi-agent system that solves capture-the-flag challenges — architecture, pipeline, and measured results.">
+<style>
+  :root{
+    /* light palette (chosen slate with a faint blue bias; amber CRT accent) */
+    --bg:#f5f4f0; --surface:#fffefb; --surface-2:#efeee9;
+    --ink:#1b1e26; --ink-2:#4a4f5c; --ink-3:#767b88;
+    --line:#e0ded7; --line-2:#d0cec6;
+    --accent:#b9761b; --accent-soft:#f3e4cf;
+    --link:#0f6d6a;
+    --ok:#2f8a4e; --warn:#b3781f; --bad:#b4453c;
+    --code-bg:#1a1d24; --code-ink:#e8e6df;
+    --shadow:0 1px 2px rgba(20,22,28,.06),0 6px 20px rgba(20,22,28,.05);
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0f1218; --surface:#161a22; --surface-2:#1d222c;
+    --ink:#e9e8e2; --ink-2:#adb2bd; --ink-3:#7a7f8b;
+    --line:#262b35; --line-2:#333a46;
+    --accent:#e0a64b; --accent-soft:#2a2418;
+    --link:#5fb3b0;
+    --ok:#4faf6a; --warn:#d39b3c; --bad:#d1685d;
+    --code-bg:#0b0e13; --code-ink:#dfe3ea;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.28);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0f1218; --surface:#161a22; --surface-2:#1d222c;
+    --ink:#e9e8e2; --ink-2:#adb2bd; --ink-3:#7a7f8b;
+    --line:#262b35; --line-2:#333a46;
+    --accent:#e0a64b; --accent-soft:#2a2418;
+    --link:#5fb3b0;
+    --ok:#4faf6a; --warn:#d39b3c; --bad:#d1685d;
+    --code-bg:#0b0e13; --code-ink:#dfe3ea;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding-inline:20px}
+  a{color:var(--link);text-decoration:none}
+  a:hover{text-decoration:underline}
+  h1,h2,h3{line-height:1.2;text-wrap:balance;font-weight:600}
+  h2{font-size:1.5rem;margin:0 0 .2em;letter-spacing:-.01em}
+  h3{font-size:1.05rem;margin:1.6em 0 .4em}
+  p{margin:.6em 0;color:var(--ink-2)}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);
+    padding:.1em .35em;border-radius:4px;color:var(--ink)}
+  /* header */
+  header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
+    background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .topbar{max-width:880px;margin:0 auto;padding:10px 20px;display:flex;
+    align-items:center;gap:14px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:600;letter-spacing:.02em;color:var(--ink)}
+  .brand .dot{color:var(--accent)}
+  nav.anchors{display:flex;gap:16px;margin-left:auto;flex-wrap:wrap}
+  nav.anchors a{font-size:.82rem;color:var(--ink-3);font-family:var(--mono)}
+  nav.anchors a:hover{color:var(--accent);text-decoration:none}
+  /* hero */
+  .hero{padding:56px 0 12px}
+  .eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent)}
+  .hero h1{font-size:clamp(2rem,6vw,3.1rem);margin:.24em 0 .1em;letter-spacing:-.02em}
+  .lede{font-size:1.15rem;color:var(--ink-2);max-width:60ch}
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+  .chip{font-family:var(--mono);font-size:.78rem;background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:6px 12px;color:var(--ink-2)}
+  .chip b{color:var(--ink);font-weight:600}
+  section{padding:34px 0;border-top:1px solid var(--line);scroll-margin-top:64px}
+  section:first-of-type{border-top:none}
+  .kicker{font-family:var(--mono);font-size:.78rem;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+  /* cards / grid */
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:16px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 .3em;font-size:.98rem;color:var(--ink);display:flex;align-items:center;gap:8px}
+  .card p{margin:0;font-size:.9rem}
+  .tag{font-family:var(--mono);font-size:.7rem;padding:2px 7px;border-radius:5px;
+    background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+  /* pipeline steps */
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:16px 0 0;display:grid;gap:12px}
+  ol.steps li{counter-increment:s;position:relative;background:var(--surface);
+    border:1px solid var(--line);border-radius:10px;padding:14px 16px 14px 56px}
+  ol.steps li::before{content:counter(s,decimal-leading-zero);position:absolute;
+    left:14px;top:14px;font-family:var(--mono);font-size:.9rem;color:var(--accent);
+    font-weight:600}
+  ol.steps b{color:var(--ink)}
+  ol.steps p{margin:.2em 0 0;font-size:.9rem}
+  /* diagram */
+  .diagram{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:18px;margin-top:16px;overflow-x:auto}
+  pre.mermaid{margin:0;text-align:center;min-width:520px}
+  /* table */
+  .tablewrap{overflow-x:auto;margin-top:16px;border:1px solid var(--line);border-radius:12px}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:480px}
+  th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line)}
+  thead th{font-family:var(--mono);font-size:.74rem;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink-3);background:var(--surface-2)}
+  tbody tr:last-child td{border-bottom:none}
+  tr.total td{font-weight:600;background:var(--surface-2);color:var(--ink)}
+  td.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+  .bar{--v:0;height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden;min-width:80px}
+  .bar>i{display:block;height:100%;width:var(--v);background:var(--accent)}
+  /* callout */
+  .callout{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
+    border-radius:12px;padding:16px 18px;margin-top:16px}
+  .callout .big{font-family:var(--mono);font-size:1.7rem;color:var(--accent);font-weight:600;
+    font-variant-numeric:tabular-nums}
+  .callout p{color:var(--ink-2);margin:.3em 0 0}
+  /* status dots */
+  .s-ok{color:var(--ok)} .s-warn{color:var(--warn)} .s-bad{color:var(--bad)}
+  ul.notes{margin:.6em 0;padding-left:1.1em}
+  ul.notes li{margin:.35em 0;color:var(--ink-2)}
+  ul.notes b{color:var(--ink)}
+  /* code block */
+  pre.code{background:var(--code-bg);color:var(--code-ink);border-radius:10px;
+    padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:.82rem;line-height:1.6;
+    border:1px solid var(--line-2)}
+  pre.code .c{color:#7f8794} pre.code .k{color:var(--accent)}
+  footer{border-top:1px solid var(--line);padding:28px 0 48px;color:var(--ink-3);font-size:.85rem}
+  footer .wrap{display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+  .repo{font-family:var(--mono)}
+  @media (max-width:560px){.hero{padding-top:40px}nav.anchors{display:none}}
+</style>
+
+<header class="top">
+  <div class="topbar">
+    <span class="brand">ctf<span class="dot">-</span>agent</span>
+    <nav class="anchors">
+      <a href="#overview">Overview</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#results">Results</a>
+      <a href="#usage">Usage</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero" id="overview">
+    <div class="eyebrow">Multi-agent security tooling</div>
+    <h1>CTF Agent</h1>
+    <p class="lede">An orchestrator routes a capture-the-flag challenge to a category
+      specialist, which drives real security tools inside a sandbox until a flag
+      appears — then writes up how it solved it.</p>
+    <div class="chips">
+      <span class="chip"><b>36 / 47</b> solved (77%)</span>
+      <span class="chip"><b>6</b> category specialists</span>
+      <span class="chip"><b>InterCode-CTF</b> benchmark</span>
+      <span class="chip"><b>2</b> sandbox backends</span>
+      <span class="chip">Claude Agent SDK</span>
+    </div>
+  </section>
+
+  <section id="what">
+    <div class="kicker">What it is</div>
+    <h2>A team of specialists, not one prompt</h2>
+    <p>Solving CTF challenges spans wildly different skills — breaking RSA, decompiling
+      a binary, carving a disk image, probing a web app. A single agent carrying every
+      tool and every instruction does none of them well. This system splits the work:
+      a lightweight <b>recon</b> pass gathers facts, an <b>orchestrator</b> routes to the
+      right <b>specialist</b>, and a deterministic <b>verifier</b> decides when the flag
+      is actually found. Each specialist runs in an isolated sandbox with only the tools
+      its category needs.</p>
+    <p>The design follows a finding from the research literature (EnIGMA, D-CIPHER):
+      for CTF agents, the <em>tool interface</em> matters more than a clever agent loop.
+      So the effort goes into clean tool access and honest measurement, not orchestration
+      theatre.</p>
+    <div class="grid">
+      <div class="card"><h3>Recon <span class="tag">deterministic</span></h3>
+        <p>Runs <code>ls</code>, <code>file</code>, <code>strings</code> up front. No LLM.
+        Sharpens routing and briefs the specialist so it starts informed.</p></div>
+      <div class="card"><h3>Orchestrator</h3>
+        <p>Picks the specialist from the challenge category (or recon's guess), then
+        hands off with a ready-made brief.</p></div>
+      <div class="card"><h3>Specialist</h3>
+        <p>Category-tuned prompt + a scoped tool set, driving a shell inside the sandbox.</p></div>
+      <div class="card"><h3>Verifier <span class="tag">deterministic</span></h3>
+        <p>Regex-matches the flag format. The moment a flag appears in any output, the
+        loop stops — no wasted turns.</p></div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="kicker">Architecture</div>
+    <h2>How a challenge flows through the system</h2>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+  C["Challenge<br/>files + prompt"] --> R["Recon pass<br/>ls · file · strings"]
+  R --> O{"Orchestrator<br/>route by category"}
+  O --> CR["Crypto"]
+  O --> RE["Reversing"]
+  O --> FO["Forensics"]
+  O --> WE["Web"]
+  O --> PW["Pwn"]
+  O --> MI["Misc / General"]
+  CR & RE & FO & WE & PW & MI --> SB["Sandbox<br/>(Docker or local)<br/>runs shell + tools"]
+  SB --> V{"Verifier<br/>flag regex match?"}
+  V -- "no" --> SB
+  V -- "yes" --> A["Audit log + Writeup"]
+  A --> F(["Flag / result"])
+      </pre>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>Sandbox — Docker</h3>
+        <p>One Kali container per challenge, task files mounted read-scoped. Real isolation
+        for untrusted binaries. Kali base + Rosetta runs x86-64 on Apple Silicon.</p></div>
+      <div class="card"><h3>Sandbox — local</h3>
+        <p>Host shell in the challenge dir. No isolation — trusted crypto/general only;
+        needs no container, useful for fast iteration.</p></div>
+      <div class="card"><h3>Audit log</h3>
+        <p>Every command, its output, and the agent's reasoning, timestamped. Deterministic
+        ground truth — no model touches it.</p></div>
+      <div class="card"><h3>Writeup</h3>
+        <p>One LLM pass narrates the audit log into a human CTF writeup. It can't invent
+        steps that aren't in the trace.</p></div>
+    </div>
+  </section>
+
+  <section id="pipeline">
+    <div class="kicker">Pipeline</div>
+    <h2>Five steps, per challenge</h2>
+    <ol class="steps">
+      <li><b>Recon.</b><p>Deterministic probes (<code>ls · file · strings</code>) build a
+        brief and a category guess. Cheap, reliable, and it stops the specialist from
+        rediscovering the filesystem.</p></li>
+      <li><b>Route.</b><p>The orchestrator maps the challenge category (from the benchmark
+        label or recon) to one of six specialists.</p></li>
+      <li><b>Solve.</b><p>The specialist drives <code>sandbox_bash</code> — an MCP tool
+        wired to the container — inspecting, hypothesising, and testing with its category's
+        tools.</p></li>
+      <li><b>Verify &amp; stop.</b><p>Every command output is scanned for the flag format.
+        First match auto-terminates the loop — the key cost control.</p></li>
+      <li><b>Record.</b><p>The run emits <code>audit.jsonl</code> (ground truth) and
+        <code>writeup.md</code> (narrated). Scoring is strict, with a separate
+        <em>near-miss</em> column for cracked-but-mis-formatted flags.</p></li>
+    </ol>
+  </section>
+
+  <section id="results">
+    <div class="kicker">Results · InterCode-CTF (picoCTF-based)</div>
+    <h2>Measured, and honestly</h2>
+    <p>Strict solve = an exact match to the ground-truth flag, the same check picoCTF
+      itself runs. <em>Near-miss</em> = the puzzle was cracked but the flag was
+      mis-formatted (classical ciphers emit uppercase; the gold is often lowercase) —
+      tracked separately, never counted as a solve.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Category</th><th class="num">Strict</th><th>Rate</th><th class="num">Effective</th></tr></thead>
+        <tbody id="restable">
+          <tr><td>Crypto <span class="tag">full category</span></td><td class="num">13 / 19</td>
+            <td><div class="bar" style="--v:68%"><i></i></div></td><td class="num">14 / 19</td></tr>
+          <tr><td>General Skills <span class="tag">sample</span></td><td class="num">8 / 8</td>
+            <td><div class="bar" style="--v:100%"><i></i></div></td><td class="num">8 / 8</td></tr>
+          <tr><td>Forensics <span class="tag">sample</span></td><td class="num">9 / 10</td>
+            <td><div class="bar" style="--v:90%"><i></i></div></td><td class="num">9 / 10</td></tr>
+          <tr><td>Reversing <span class="tag">sample</span></td><td class="num">8 / 10</td>
+            <td><div class="bar" style="--v:80%"><i></i></div></td><td class="num">8 / 10</td></tr>
+          <tr class="total"><td>Total · 4 categories</td><td class="num">38 / 47</td>
+            <td><div class="bar" style="--v:81%"><i></i></div></td><td class="num">39 / 47</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <div class="big">9 / 19 → 13 / 19</div>
+      <p><b>One iteration, measured.</b> The auto-terminator was firing on encoded
+        flag look-alikes — a ROT13'd <code>cvpbPGS{…}</code> matched the loose flag
+        regex and stopped the solver before it decoded. Pinning the pattern to
+        <code>picoCTF{…}</code> recovered four crypto solves. Find the failure mode,
+        fix it, re-measure the gain.</p>
+    </div>
+
+    <h3>Where it still fails</h3>
+    <ul class="notes">
+      <li><b class="s-warn">Dead remote servers.</b> The Web tasks point at live
+        picoCTF hosts (now decommissioned) with no local files, so they're
+        unsolvable offline — a dataset limit, not a solver gap. The real-world
+        platform targets live authorised hosts instead.</li>
+      <li><b class="s-bad">Remote-service pwn.</b> Some pwn challenges need a running
+        service; local-only ones (source provided) fare better.</li>
+      <li><b class="s-warn">Case near-miss.</b> Cracked, wrong case. Content case is
+        genuinely unknowable to the solver, so it's reported, not chased.</li>
+    </ul>
+    <p style="margin-top:14px">A balanced 6-category run (38 tasks, full toolset,
+      retries) scored <b>27/38 (71%)</b> — 75% once the dead-server Web tasks are
+      excluded — in 1164s at concurrency 5.</p>
+  </section>
+
+  <section id="usage">
+    <div class="kicker">Usage</div>
+    <h2>Running it</h2>
+    <h3>Setup</h3>
+    <pre class="code"><span class="c"># python venv + the Claude Agent SDK (needs the `claude` CLI on PATH)</span>
+python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt</pre>
+    <h3>Import a benchmark</h3>
+    <pre class="code"><span class="c"># 100 InterCode-CTF tasks; gold flags kept OUT of the sandbox</span>
+python import_intercode.py path/to/intercode/data/ctf -o challenges/intercode</pre>
+    <h3>Run — local backend (crypto / general, no container)</h3>
+    <pre class="code"><span class="k">CTF_SANDBOX=local</span> ./.venv/bin/python run.py challenges/intercode \
+    --category crypto --max-turns 20</pre>
+    <h3>Run — Docker backend (forensics / rev / everything)</h3>
+    <pre class="code">docker build -t ctf-agent:latest -f Dockerfile.lean .
+./.venv/bin/python run.py challenges/intercode --per-category 5 --max-turns 15</pre>
+    <p>Each solve writes <code>audit.jsonl</code> and <code>writeup.md</code> into the
+      challenge folder; the runner prints a live solve rate and per-category breakdown.</p>
+  </section>
+
+  <section id="build">
+    <div class="kicker">Scope</div>
+    <h2>Built vs. deferred</h2>
+    <div class="grid">
+      <div class="card"><h3><span class="s-ok">●</span> Working now</h3>
+        <p>Orchestrator, recon, verifier, both sandboxes, audit + writeup, crash-safe
+        batch runner, near-miss scoring, InterCode import.</p></div>
+      <div class="card"><h3><span class="s-ok">●</span> Tools wired</h3>
+        <p>Crypto (pycryptodome, sympy, z3, RsaCtfTool), forensics (binwalk, exiftool,
+        zsteg, steghide, tshark, foremost), rev (radare2, gdb).</p></div>
+      <div class="card"><h3><span class="s-warn">●</span> Deferred by design</h3>
+        <p>Stateful MCP tools — GhidraMCP (rev), pwndbg-mcp (pwn), Playwright (web) —
+        added when a batch shows they're needed.</p></div>
+      <div class="card"><h3><span class="s-warn">●</span> Known limits</h3>
+        <p>SageMath (heavy) and pwntools/unicorn (cmake) live in the full image, not the
+        lean one; content-case near-misses left honest.</p></div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>Built with the Claude Agent SDK · benchmarked on InterCode-CTF.</span>
+    <span class="repo">github.com/drcano/ctf-agent</span>
+  </div>
+</footer>

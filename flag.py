@@ -1,0 +1,107 @@
+"""Flag detection — the auto-terminate core of the solver.
+
+The flag format IS the verifier: if a specialist's output contains a string
+matching the challenge's flag regex, the solve loop stops. No LLM needed for
+the primary check.
+"""
+import re
+
+# Common CTF flag shapes. A specific challenge overrides with its own regex.
+# Flag bodies never contain whitespace or backticks; excluding them stops the
+# extractor from matching the agent's *prose about* a flag (e.g. "picoCTF{` ... `}")
+# and auto-terminating on garbage before the real solve.
+DEFAULT_FLAG_RE = re.compile(r"(?:flag|ctf|pico|[A-Za-z0-9_]{2,10})\{[^}\s`]{1,200}\}")
+
+
+# Obvious non-answers the model writes when talking *about* the flag format.
+_PLACEHOLDERS = {"...", "…", "flag", "flaghere", "flag_here", "xxx", "example",
+                 "redacted", "your_flag_here", "insert_flag_here"}
+
+# Decoy markers hardcoded in provided source/binaries (real flags come from the
+# exploit/remote, not the handed-out .c). Matched as whole leet-normalized tokens
+# so a real themed flag (e.g. "greatest_hits") is never rejected.
+_DECOY_TOKENS = {"test", "fake", "sample", "dummy", "placeholder", "changeme",
+                 "example", "redacted"}
+# Self-labeling decoys/honeypots (e.g. /api/debug returning
+# flag{debug_endpoint_not_the_real_flag}). Matched as normalized substrings — no
+# real flag announces itself as fake, so this is safe and target-agnostic (works on
+# unknown live targets where we can't hardcode the decoy string).
+_DECOY_SUBSTR = ("notthereal", "notrealflag", "decoy", "honeypot", "fakeflag",
+                 "donotuse", "notaflag", "nottheflag")
+_LEET = str.maketrans("013457", "oieast")
+
+
+def _is_placeholder(flag: str) -> bool:
+    body = flag[flag.find("{") + 1:flag.rfind("}")].strip().lower()
+    if body in _PLACEHOLDERS or "..." in body or "…" in body:
+        return True
+    norm = re.sub(r"[^a-z0-9]", "", body)
+    if any(s in norm for s in _DECOY_SUBSTR):     # self-labeled decoy/honeypot
+        return True
+    # any token (leet-normalized) that is a decoy marker -> placeholder
+    return any(re.sub(r"[^a-z0-9]", "", t).translate(_LEET) in _DECOY_TOKENS
+               for t in re.split(r"[_\-\s]+", body))
+
+
+def find_flag(text: str, pattern: str | None = None) -> str | None:
+    """Return the first real flag-shaped substring in `text`, skipping obvious
+    placeholders the model emits when describing the format."""
+    rx = re.compile(pattern) if pattern else DEFAULT_FLAG_RE
+    for m in rx.finditer(text or ""):
+        if not _is_placeholder(m.group(0)):
+            return m.group(0)
+    return None
+
+
+def is_correct(candidate: str | None, real_flag: str | None) -> bool:
+    """Strict scoring — what picoCTF's checker actually does (case-sensitive,
+    exact). If no real flag is given, a well-formed match is a solve (live mode)."""
+    if not candidate:
+        return False
+    if real_flag:
+        return candidate.strip() == real_flag.strip()
+    return True
+
+
+def is_near_miss(candidate: str | None, real_flag: str | None) -> bool:
+    """True when the solver cracked it but got the case wrong (classical ciphers
+    output uppercase; picoCTF gold is lowercase). Diagnostic, not a solve:
+    separates 'couldn't solve' from 'solved, fumbled the format'."""
+    if not candidate or not real_flag:
+        return False
+    c, r = candidate.strip(), real_flag.strip()
+    return c != r and c.lower() == r.lower()
+
+
+def demo() -> None:
+    assert find_flag("junk\nflag{h3llo_w0rld} more") == "flag{h3llo_w0rld}"
+    assert find_flag("picoCTF{a_b_c}") == "picoCTF{a_b_c}"
+    assert find_flag("no flag here") is None
+    assert find_flag("KEY{xyz}", pattern=r"KEY\{[^}]+\}") == "KEY{xyz}"
+    assert is_correct("flag{x}", "flag{x}") is True
+    assert is_correct("flag{x}", "flag{y}") is False
+    assert is_correct("flag{x}", None) is True          # live mode: shape is enough
+    assert is_correct(None, None) is False
+    # near-miss: cracked but mis-formatted
+    # placeholders are not real flags
+    assert find_flag("the flag is picoCTF{...}") is None
+    assert find_flag("submit picoCTF{your_flag_here}") is None
+    assert find_flag("picoCTF{r34l_0ne} not picoCTF{...}") == "picoCTF{r34l_0ne}"
+    # decoy flags hardcoded in provided source are not real answers (leet-normalized)
+    assert find_flag("char *flag = picoCTF{T3ST_fl4g_f0rm4t_5tr1ng_abcd1234};") is None
+    assert find_flag("picoCTF{FAKE_local_test}") is None
+    assert find_flag("picoCTF{test_flag}") is None
+    # self-labeling honeypot/decoy flags (from a /debug endpoint) are not answers
+    assert find_flag("flag{debug_endpoint_not_the_real_flag}") is None
+    assert find_flag("flag{this_is_a_decoy}") is None
+    # ...but a real themed flag with leet or the word 'greatest' is NOT rejected
+    assert find_flag("picoCTF{greatest_h1ts_2024}") == "picoCTF{greatest_h1ts_2024}"
+    assert find_flag("picoCTF{h3llo_w0rld}") == "picoCTF{h3llo_w0rld}"
+    assert is_near_miss("PICOCTF{THENUMBERSMASON}", "picoCTF{thenumbersmason}") is True
+    assert is_near_miss("flag{x}", "flag{x}") is False   # strict solve, not a near-miss
+    assert is_near_miss("picoCTF{wrong}", "picoCTF{right}") is False
+    print("flag.py ok")
+
+
+if __name__ == "__main__":
+    demo()

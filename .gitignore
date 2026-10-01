@@ -1,0 +1,47 @@
+__pycache__/
+*.pyc
+.venv/
+# solver outputs — keep only the merged evidence file
+results.jsonl
+results.*.jsonl
+challenges/
+**/audit.jsonl
+**/writeup.md
+build.log
+build.lean.log
+run.*.log
+.env
+run_docker_batches.sh
+run.docker.log
+server.log
+run.all.log
+run.rev.log
+run_all.sh
+run.allstar.log
+run_allstar.sh
+build.full.log
+build.lean2.log
+build.full3.log
+llm_bot.log
+run.owasp.log
+bounty_runs/
+bounty_metrics.jsonl
+scope.json
+llm_bot.log
+scope.test.json
+scope.juice.json
+
+# tracked evidence directory (curated benchmark results)
+!results/
+results/**
+!results/*.jsonl
+!results/*.md
+logs/
+scope.*.json
+!scope.example.json
+results/ab_traces/
+redteam_runs/
+
+# real-program rules-of-engagement — NEVER commit (safety guard)
+roe.*.txt
+roe.*

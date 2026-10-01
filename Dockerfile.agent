@@ -1,0 +1,97 @@
+# CTF-solver agent sandbox. One container = the agent's execution env.
+# Kali base: ~+9.5% solve rate vs Ubuntu for the same model (arXiv 2605.28334).
+# ponytail: single fat image for all categories. Split per-agent images only if
+# cold-start or size actually hurts.
+FROM kalilinux/kali-rolling
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv python3-dev pipx git curl wget jq \
+    build-essential cmake pkg-config ruby ruby-dev golang cargo \
+    # headers for gmpy2/psutil/pwntools/unicorn native builds
+    libgmp-dev libmpfr-dev libmpc-dev libssl-dev libffi-dev \
+    # rev/pwn
+    gdb binutils file ltrace strace radare2 \
+    # forensics
+    exiftool binwalk foremost p7zip-full poppler-utils tshark \
+    # crypto/pw cracking + wordlist
+    hashcat john fcrackzip pdfcrack wordlists \
+    && rm -rf /var/lib/apt/lists/*
+RUN gunzip -kf /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || true
+ENV WORDLIST=/usr/share/wordlists/rockyou.txt
+# ponytail: SageMath deferred — no reliable Kali apt package, and it's ~2GB.
+# sympy+pycryptodome+z3 cover most crypto; add via the sagemath/sagemath image
+# (or conda) only when a lattice/DLog challenge actually needs it.
+
+# --- crypto ---
+RUN pip3 install --break-system-packages \
+    pycryptodome sympy z3-solver factordb-python xortool
+RUN git clone --depth 1 https://github.com/RsaCtfTool/RsaCtfTool /opt/RsaCtfTool \
+    && pip3 install --break-system-packages -r /opt/RsaCtfTool/requirements.txt
+
+# --- rev / pwn ---
+# NOTE (measured): this image is native aarch64 on M1/Colima — there is NO x86-64 gcc/qemu/
+# binfmt inside the container, so x86-64 pwn ELFs (most of InterCode) can't run here. That, not
+# the solver, is why pwn is weak. To unlock x86-64 pwn: install qemu-user-static + register
+# binfmt_misc (needs a privileged run), or run an x86-64 image under Rosetta. pwn_exploit itself
+# is arch-agnostic (verified ret2win on aarch64).
+# core pwn (must succeed); ROPgadget/ropper best-effort — their dep filebytes
+# uses ast.Str, removed in py3.12+ (Kali py3.13). pwntools' own ROP() + one_gadget
+# cover ROP-chaining without them.
+# angr 10.x BUNDLES claripy (angr.rustylib.claripy) — do NOT `pip install claripy`
+# separately: the standalone pkg downgrades z3-solver and breaks angr's rust claripy.
+# The symbolic_solve primitive imports it as `angr.claripy`.
+RUN pip3 install --break-system-packages pwntools angr r2pipe
+# r2ghidra: Ghidra's decompiler engine as an r2 plugin (`pdg`) — Ghidra-quality
+# output, no JDK/GUI. Would power the `decompile` MCP tool with real decompilation.
+# BEST-EFFORT / currently fails to build in this image: r2ghidra's configure can't
+# find r_core via pkg-config ("pkg-config flags for r_core: no") because the apt
+# radare2 doesn't ship .pc files on PKG_CONFIG_PATH. Non-fatal: the decompile tool
+# falls back to r2's built-in pdc + disassembly. To fix, install radare2 from source
+# (or expose r2's pkgconfig dir) so r2pm can link the plugin against r_core.
+RUN apt-get update && apt-get install -y --no-install-recommends unzip \
+    && export CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    && r2pm -U && r2pm -ci r2ghidra \
+    || echo "r2ghidra skipped (decompile falls back to pdc/disasm)"
+RUN pip3 install --break-system-packages ROPgadget ropper || echo "ropgadget/ropper skipped (py3.13 filebytes incompat)"
+RUN gem install one_gadget || true
+# pwndbg for interactive GDB (also exposed via pwndbg-mcp on the host side)
+RUN git clone --depth 1 https://github.com/pwndbg/pwndbg /opt/pwndbg \
+    && cd /opt/pwndbg && ./setup.sh || true
+
+# --- web --- (each tool best-effort so one failure doesn't sink the image)
+RUN pip3 install --break-system-packages httpx requests sqlmap arjun h2 || true  # h2: single-packet race
+RUN go install github.com/ffuf/ffuf/v2@latest || true
+RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest || true
+RUN git clone --depth 1 https://github.com/ticarpi/jwt_tool /opt/jwt_tool || true; \
+    git clone --depth 1 https://github.com/vladko312/SSTImap /opt/SSTImap || true
+# --- deserialization gadget-chain tooling (closes the last web-class gap; Expert CUSTOM-chain labs
+#     still need a hand-crafted chain, but the class is now mechanically reachable) ---
+RUN apt-get update && apt-get install -y --no-install-recommends php-cli default-jre-headless || true; \
+    git clone --depth 1 https://github.com/ambionics/phpggc /opt/phpggc || true; \
+    curl -sSL -o /opt/ysoserial.jar https://github.com/frohoff/ysoserial/releases/download/v0.0.6/ysoserial-all.jar || true
+RUN pip3 install --break-system-packages playwright && playwright install --with-deps chromium || \
+    echo "playwright skipped"
+
+# --- forensics --- (binwalk already installed via apt; skip slow cargo build)
+RUN pip3 install --break-system-packages volatility3 yara-python pefile oletools || true
+RUN gem install zsteg || true
+# stegseek: grab release .deb
+RUN wget -q https://github.com/RickdeJager/stegseek/releases/latest/download/stegseek_0.6-1.deb \
+    -O /tmp/stegseek.deb && apt-get install -y /tmp/stegseek.deb || true
+
+# --- osint (challenge-scoped targets ONLY; enforce in agent prompt) ---
+RUN pipx install maigret && pipx install sherlock-project && pipx install theHarvester || \
+    pip3 install --break-system-packages maigret sherlock-project theHarvester
+
+# --- discovery arsenal (added 2026-09-22; placed late so the rebuild is cheap layers) ---
+RUN go install github.com/projectdiscovery/katana/cmd/katana@latest || true  # live crawler -> param URLs for dast_scan
+RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin || true  # --only-verified secret scan
+
+ENV PATH="/root/go/bin:/root/.cargo/bin:/root/.local/bin:${PATH}"
+# The sandbox runs `bash -lc`, and a login shell resets PATH from /etc/profile —
+# so go/cargo/pipx bins (ffuf, nuclei, maigret, …) would be invisible. Symlink
+# them onto the always-present /usr/local/bin so every shell can find them.
+RUN for d in /root/go/bin /root/.cargo/bin /root/.local/bin; do \
+      [ -d "$d" ] && ln -sf "$d"/* /usr/local/bin/ 2>/dev/null || true; done; true
+WORKDIR /work
