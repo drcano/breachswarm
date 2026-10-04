@@ -131,7 +131,9 @@ orchestrator and stateful modes are kept as opt-in, documented experiments. The 
 also acted as a fuzzer, surfacing **three real correctness bugs** in the solve loop
 (silent-decoy flail, crash-on-budget-exhaustion, false-positive flag match) — fixed, with
 regression tests for the two logic bugs. And a clean finding: **chain depth ≠ difficulty** — the deeper
-Gauntlet solved in ~3 min while Fortress's WAF-evasion S1 was the real wall. A follow-up
+Gauntlet solved in ~3 min while Fortress's WAF-evasion S1 was the real wall — since **cracked**
+(2026-09-23): an *escalating* WAF nudge got the agent off the reflexive `--` terminator and onto
+`union/**/select`, chaining S1→S4 to the flag in 56 turns. A follow-up
 **RAG ablation** (full vs KB-only vs no-RAG on Gauntlet) then found **no measurable RAG lift
 there** — all 2/2, wall/turns within noise — because the base model already knows those
 techniques; RAG's value, if any, is on rarer/precise payloads (untested). Honest and a little
@@ -206,6 +208,12 @@ exploited two distinct vulnerability classes autonomously:
   → [docs/sqli_demo_writeup.md](docs/sqli_demo_writeup.md)
 
 ### Third-party targets — full findings reports
+
+**Ground-truth benchmark (`bench_bounty.py`)** — the honest metric: `bounty.hunt` vs. hard,
+multi-stage targets with *planted* flags, scored on whether the real flag was recovered (not
+self-report). **5/5** solved — harbor (needle-in-haystack BOLA), gauntlet (5-stage→RCE), chain
+(SSRF→metadata), spa (JS-XHR IDOR), and **Fortress** (4-stage: WAF-evasion SQLi → mass-assign →
+SSRF → SSTI RCE), the former hard-target ceiling. ~$1–1.4 and ≤1 min on the first four.
 
 Pointed at real, third-party OWASP-style vulnerable apps it had never seen, the
 bounty pipeline (`bounty.py`, scope-gated) produced client-ready reports:

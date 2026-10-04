@@ -47,8 +47,14 @@ graphql / xxe / smuggle / protopollute / deserialize). All scope/rate-bound; loo
 (repeat_guard + --wall-cap). Image rebuilt WITH `h2` (single-packet race verified live in-sandbox).
 - **`bench_bounty.py`** = the metric (bounty.hunt vs known-vuln targets, ground-truth flag scoring).
   Measured 2026-09-22: **4/4** on realistic targets (harbor BOLA / gauntlet 5-stage->RCE / chain
-  SSRF->metadata / spa JS-XHR IDOR), ~$1-1.4 and <=1min each. Ceiling: **boss** (Fortress 4-stage,
-  hard stage-1 WAF) **NOT solved** in 107 turns / $10.5 — the honest hard-target limit.
+  SSRF->metadata / spa JS-XHR IDOR), ~$1-1.4 and <=1min each. **boss** (Fortress 4-stage) was the
+  honest ceiling at 107 turns (stuck at the stage-1 WAF) — now **SOLVED 2026-09-23** (56 turns, full
+  S1->S4 chain: union/**/select WAF-evasion -> nested mass-assign -> SSRF decimal-IP -> SSTI RCE).
+  Root cause was in `solver.py::_waf_nudge`: it was one-shot and never named the trap. Fix = escalate
+  the nudge and tell the agent the `--`/`#` comment terminators are themselves WAF-blocked, so a UNION
+  as the last clause needs none. Verified from the audit trail (real flag, not the decoy). (Cost not
+  cleanly measured — early-exit accounting gap, see [[ctf-agent-gotchas]].) Remaining hard target:
+  **citadel** — status UNKNOWN, its last bench row was an infra casualty ($0/82-turn), needs a clean re-run.
 - **`bench_validator.py`** = validator precision/recall on the tuned corpus (1.0/1.0). Caught
   + fixed 3 real false-negatives (mixed-section BOLA; XSS-execution class; auth-session takeover w/
   Expected:403-vs-Actual:302 — from the PortSwigger campaign).
