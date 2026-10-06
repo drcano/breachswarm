@@ -31,6 +31,22 @@ from report import generate_report
 
 METRICS = "bounty_metrics.jsonl"
 
+# The agent's full toolset — shared by hunt() (enumerate everything) and hunt_one() (one
+# objective), so the two can never drift apart.
+BOUNTY_TOOLS = ["mcp__ctf__sandbox_bash", "mcp__ctf__note", "mcp__ctf__lead",
+                "mcp__ctf__jwt_forge", "mcp__ctf__blind_extract",
+                "mcp__ctf__time_blind", "mcp__ctf__ssrf_recon", "mcp__ctf__oob",
+                "mcp__ctf__authz_matrix", "mcp__ctf__browser_verify",
+                "mcp__ctf__exploit_server",
+                "mcp__ctf__endpoint_recon", "mcp__ctf__subdomain_recon",
+                "mcp__ctf__crawl", "mcp__ctf__secret_scan",
+                "mcp__ctf__dast_scan", "mcp__ctf__browser_session",
+                "mcp__ctf__race", "mcp__ctf__mass_assign",
+                "mcp__ctf__graphql", "mcp__ctf__xxe", "mcp__ctf__smuggle",
+                "mcp__ctf__protopollute", "mcp__ctf__deserialize",
+                "mcp__ctf__chain_scan",
+                "mcp__kb__search_knowledge"]
+
 BOUNTY_SYS = SPECIALISTS["web"] + (
     "\n\nBUG-BOUNTY MODE. You are testing an AUTHORIZED, in-scope target only. "
     "Rules of engagement: stay strictly on the target host(s) named in the task — "
@@ -672,6 +688,54 @@ def _recon_sweep(sb, target: str, rate: int = 6) -> str:
     return "\n\n".join(out)
 
 
+def _objective_task(target: str, scope: Scope, objective: str, context: str = "") -> str:
+    """Focused prompt for ONE objective — the swarm's unit of work. Unlike hunt()'s
+    'recon then enumerate everything', it names a single hypothesis and tells the solver to
+    confirm-or-drop it fast, record any reusable primitive for chaining, and stop."""
+    return (f"Authorized target: {target}\nProgram: {scope.program}\n"
+            f"In-scope hosts: {', '.join(scope.in_scope)}\n"
+            f"Rate limit: ~{scope.rate_limit_rps} req/s.\n\n"
+            + (f"SHARED RECON / CONTEXT (already gathered — do NOT re-enumerate):\n{context}\n\n"
+               if context else "")
+            + f"SINGLE OBJECTIVE — test exactly this and nothing else:\n{objective}\n\n"
+            "Confirm it with a minimal, deterministic proof, or drop it fast. If you confirm a "
+            "REUSABLE primitive (a token, credential, injectable param, SSRF reach), record it with "
+            "`note` so a later step can chain on it; record an uncertain candidate with `lead`. Do "
+            "NOT broaden scope beyond this objective — another solver owns the rest. Stop as soon as "
+            "this objective is resolved.")
+
+
+async def _run_agent_loop(task: str, opts, wall_cap_s: int = 0) -> dict:
+    """Drive one agent query to completion. Shared by hunt() (enumerate) and hunt_one() (single
+    objective) so the two documented stop conditions are handled in ONE place: the wall-clock cap,
+    and the SDK RAISING on max_turns (a deep run with a full trace must finalize, not crash — any
+    OTHER exception, e.g. the API cyber safeguard, still surfaces)."""
+    thoughts, turns, cost, usages = [], 0, None, []
+    start = time.time()
+    try:
+        async for msg in query(prompt=task, options=opts):
+            if wall_cap_s and time.time() - start > wall_cap_s:
+                print(f"[budget] wall-clock cap {wall_cap_s}s reached — finalizing from the trace "
+                      f"so far (findings + leads + campaign memory are still written)")
+                break
+            if isinstance(msg, AssistantMessage):
+                turns += 1
+            if isinstance(msg, ResultMessage):
+                if msg.total_cost_usd:
+                    cost = msg.total_cost_usd
+                if msg.model_usage:
+                    usages.append(msg.model_usage)
+            for b in getattr(msg, "content", []) or []:
+                if isinstance(b, TextBlock):
+                    thoughts.append({"t": time.time(), "kind": "thought", "text": b.text})
+    except Exception as e:
+        if "maximum number of turns" not in str(e):
+            raise
+        print(f"[max-turns] agent used all its turns — finalizing from the trace so far "
+              f"(findings + leads + campaign memory are still written)")
+    return {"thoughts": thoughts, "turns": turns, "cost": cost, "usages": usages}
+
+
 async def hunt(scope: Scope, target: str, backend: str = "docker",
                max_turns: int = 40, scope_path: str | None = None,
                enforce: bool = False, parallel_recon: bool = False,
@@ -707,19 +771,7 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
             opts = ClaudeAgentOptions(
                 system_prompt=BOUNTY_SYS + extra_roe,
                 mcp_servers={"ctf": ctf_srv, "kb": _knowledge_server()},
-                allowed_tools=["mcp__ctf__sandbox_bash", "mcp__ctf__note", "mcp__ctf__lead",
-                               "mcp__ctf__jwt_forge", "mcp__ctf__blind_extract",
-                               "mcp__ctf__time_blind", "mcp__ctf__ssrf_recon", "mcp__ctf__oob",
-                               "mcp__ctf__authz_matrix", "mcp__ctf__browser_verify",
-                               "mcp__ctf__exploit_server",
-                               "mcp__ctf__endpoint_recon", "mcp__ctf__subdomain_recon",
-                               "mcp__ctf__crawl", "mcp__ctf__secret_scan",
-                               "mcp__ctf__dast_scan", "mcp__ctf__browser_session",
-                               "mcp__ctf__race", "mcp__ctf__mass_assign",
-                               "mcp__ctf__graphql", "mcp__ctf__xxe", "mcp__ctf__smuggle",
-                               "mcp__ctf__protopollute", "mcp__ctf__deserialize",
-                               "mcp__ctf__chain_scan",
-                               "mcp__kb__search_knowledge"],
+                allowed_tools=BOUNTY_TOOLS,
                 max_turns=max_turns, model=MODEL)
             recon_turns, recon_cost, recon_map = 0, 0.0, ""
             usages = []  # raw ResultMessage.model_usage dicts for token-based costing
@@ -759,33 +811,9 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
                        f"finding:\n{docs_text}\n\n" if docs_text else "")
                     + "Recon the target, then enumerate and safely confirm vulnerabilities. "
                     "Summarize every finding at the end.")
-            thoughts, turns, cost = [], 0, None
-            _run_start = time.time()
-            try:
-                async for msg in query(prompt=task, options=opts):
-                    if wall_cap_s and time.time() - _run_start > wall_cap_s:
-                        print(f"[budget] wall-clock cap {wall_cap_s}s reached — finalizing from the "
-                              f"trace so far (findings + leads + campaign memory are still written)")
-                        break
-                    if isinstance(msg, AssistantMessage):
-                        turns += 1
-                    if isinstance(msg, ResultMessage):
-                        if msg.total_cost_usd:
-                            cost = msg.total_cost_usd
-                        if msg.model_usage:
-                            usages.append(msg.model_usage)
-                    for b in getattr(msg, "content", []) or []:
-                        if isinstance(b, TextBlock):
-                            thoughts.append({"t": time.time(), "kind": "thought", "text": b.text})
-            except Exception as e:
-                # The SDK RAISES on max_turns (documented gotcha). A deep run that spends its whole
-                # budget HAS a full trace — finalize gracefully (report + campaign memory + leads)
-                # instead of crashing and losing everything. Any OTHER error (e.g. the API cyber
-                # safeguard) still surfaces as a failure.
-                if "maximum number of turns" not in str(e):
-                    raise
-                print(f"[max-turns] agent used all {max_turns} turns — finalizing from the "
-                      f"trace so far (findings + leads + campaign memory are still written)")
+            loop = await _run_agent_loop(task, opts, wall_cap_s)
+            thoughts, turns, cost = loop["thoughts"], loop["turns"], loop["cost"]
+            usages.extend(loop["usages"])
             trace = sorted(sb.actions + thoughts, key=lambda e: e["t"])
             memory.record_campaign(target, sp.dump())   # accumulate per-target model for next run
     finally:
@@ -825,6 +853,53 @@ async def hunt(scope: Scope, target: str, backend: str = "docker",
           f"(+{tk['cache_read']} cache); cost ${usage['cost_recomputed_usd']} "
           f"recomputed / ${usage['cost_sdk_usd']} sdk; findings -> {workdir/'findings.md'}")
     return row
+
+
+async def hunt_one(scope: Scope, target: str, objective: str, sb, sp, ctf_srv, *,
+                   max_turns: int = 12, context: str = "", extra_roe: str = "",
+                   wall_cap_s: int = 0) -> dict:
+    """One short-lived, single-objective solver — the swarm's unit of work.
+
+    Runs INSIDE an already-set-up sandbox (`sb`) + scratchpad (`sp`) + tool server (`ctf_srv`),
+    so the swarm shares one sandbox and one recon pass across many of these instead of paying
+    for them per objective. Low turn cap, disposable. Returns only what THIS objective produced
+    (the shared sandbox/scratchpad are diffed before/after):
+      - `primitives`: facts it confirmed (`sp.facts` it added) — the CHAINING signal the
+        scheduler reads to enqueue dependent objectives.
+      - `leads`:      uncertain candidates it recorded.
+      - `trace`:      its sandbox actions + thoughts (for the per-objective report/validator).
+      - `summary`:    the solver's closing narrative.
+    hunt() stays the enumerate-everything entry point; this is the fan-out primitive."""
+    from solver import _knowledge_server
+    opts = ClaudeAgentOptions(
+        system_prompt=BOUNTY_SYS + extra_roe,
+        mcp_servers={"ctf": ctf_srv, "kb": _knowledge_server()},
+        allowed_tools=BOUNTY_TOOLS,
+        max_turns=max_turns, model=MODEL)
+    acts0, facts0, leads0 = len(sb.actions), set(sp.facts), len(sp.leads)   # snapshot shared state
+    task = _objective_task(target, scope, objective, context)
+    loop = await _run_agent_loop(task, opts, wall_cap_s)
+    trace = sorted(sb.actions[acts0:] + loop["thoughts"], key=lambda e: e["t"])
+    primitives = {k: v for k, v in sp.facts.items() if k not in facts0}
+    summary = "\n".join(t["text"] for t in loop["thoughts"][-3:])
+    return {"objective": objective, "turns": loop["turns"], "cost": loop["cost"],
+            "usages": loop["usages"], "trace": trace, "primitives": primitives,
+            "leads": sp.leads[leads0:], "summary": summary}
+
+
+def demo() -> None:
+    """Offline self-check for the hunt_one refactor (no LLM/docker). Run:
+    ./.venv/bin/python -c 'import bounty; bounty.demo()'"""
+    assert "mcp__ctf__sandbox_bash" in BOUNTY_TOOLS and len(BOUNTY_TOOLS) == 26
+    s = Scope(program="p", authorized=True, in_scope=["h"], rate_limit_rps=5.0)
+    t = _objective_task("http://h", s, "test /api?q= for SQLi", context="endpoints: /api")
+    assert "SINGLE OBJECTIVE" in t and "test /api?q= for SQLi" in t          # the one objective
+    assert "endpoints: /api" in t                                           # shared recon injected
+    assert "another solver owns the rest" in t                              # scope-narrowing guard
+    assert _objective_task("http://h", s, "x") .count("SHARED RECON") == 0   # context optional
+    import inspect
+    assert inspect.signature(hunt_one).parameters["max_turns"].default == 12  # short-lived default
+    print("bounty.demo: OK — hunt_one wiring + objective prompt verified")
 
 
 def main():
